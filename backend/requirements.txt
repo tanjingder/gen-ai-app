@@ -1,0 +1,45 @@
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# gRPC
+grpcio==1.60.0
+grpcio-tools==1.60.0
+protobuf==4.25.2
+
+# MCP SDK
+mcp==0.9.1
+
+# Ollama Integration
+ollama==0.1.6
+httpx==0.25.2
+
+# Video Processing
+opencv-python==4.9.0.80
+moviepy==1.0.3
+numpy<2  # Required for opencv compatibility
+
+# Computer Vision & ML
+ultralytics==8.1.0  # YOLOv8 for object detection
+pytesseract==0.3.10  # OCR for text extraction (requires tesseract-ocr system package)
+
+# Audio Processing
+pydub==0.25.1
+
+# Report Generation
+reportlab==4.4.4
+python-pptx==1.0.2
+
+# Async Support
+asyncio==3.4.3
+aiofiles==23.2.1
+
+# Utilities
+python-multipart==0.0.6
+python-dotenv==1.0.0
+loguru==0.7.2
+
+# JSON Schema
+jsonschema==4.20.0

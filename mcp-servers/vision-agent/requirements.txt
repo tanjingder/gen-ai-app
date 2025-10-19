@@ -1,0 +1,4 @@
+mcp==0.9.1
+opencv-python==4.9.0.80
+numpy==1.26.3
+pytesseract==0.3.10

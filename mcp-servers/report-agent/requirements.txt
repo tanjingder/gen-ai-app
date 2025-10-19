@@ -1,0 +1,4 @@
+mcp==0.9.1
+reportlab==4.0.9 # For generating PDF reports
+python-pptx==0.6.23 # For generating PowerPoint reports
+Pillow==10.2.0
