@@ -98,11 +98,32 @@ class MCPOrchestratorV2:
         text = text.replace('Â', '')     # Non-breaking space artifact
         text = text.replace('â€¦', '...')  # Ellipsis
         
+        # Remove sequences of repeating symbols/numbers (OCR noise)
+        # Pattern: 8-8-8-8- or SSS or 888 (3+ repeating chars)
+        text = re.sub(r'(\d[^\w\s]){3,}', ' ', text)  # Remove patterns like 8-8-8-
+        text = re.sub(r'([A-Z])\1{2,}', ' ', text)     # Remove SSS, AAA, etc.
+        text = re.sub(r'(\d)\1{2,}', ' ', text)        # Remove 888, 000, etc.
+        
         # Remove non-printable characters except newlines and tabs
         text = ''.join(char for char in text if char.isprintable() or char in '\n\t')
         
+        # Remove lines that are mostly non-alphabetic (OCR garbage)
+        lines = text.split('\n')
+        clean_lines = []
+        for line in lines:
+            # Count alphabetic vs non-alphabetic characters
+            alpha_count = sum(c.isalpha() for c in line)
+            total_count = len(line.strip())
+            
+            # Keep line if it's at least 30% alphabetic or very short
+            if total_count == 0 or (alpha_count / total_count >= 0.3) or total_count < 10:
+                clean_lines.append(line)
+        
+        text = '\n'.join(clean_lines)
+        
         # Remove excessive whitespace
         text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Max 2 consecutive newlines
         
         return text.strip()
     
@@ -157,11 +178,13 @@ Return JSON with:
 Intent Guidelines:
 - "summarize" → User wants full video summary (may include PDF/PPT)
 - "transcribe" → User wants audio transcription only
-- "visual_analysis" → User wants to know what's shown visually
-- "detect_objects" → User wants object detection
-- "extract_text" → User wants OCR text from video
-- "chat" → User asking a question about video content
+- "visual_analysis" → User wants to know what's shown visually (ANY question about graphs, charts, images, visuals, what's shown, what can be seen, etc.)
+- "detect_objects" → User wants specific object detection/counting (e.g., "what objects?", "detect items", "count people")
+- "extract_text" → User wants OCR text from video (e.g., "what text is shown?", "read the text")
+- "chat" → User asking a general question about video content or asking for interpretation/explanation AFTER having data
 - "report" → User explicitly asks for PDF/PPT report
+
+CRITICAL: If user asks about visual content (graphs, charts, what's shown, what's visible, etc.), ALWAYS use "visual_analysis" intent with required_data: [frames, visual_analysis]
 
 Output Type:
 - "text" → Return plain text response
@@ -180,9 +203,20 @@ Required Data (what we need to answer):
 Examples:
 "Summarize this video" → intent: summarize, required_data: [transcription, visual_analysis]
 "What is said in the video?" → intent: transcribe, required_data: [transcription]
+"Analyze the visual content" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"What's shown in the video?" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"Describe what's happening visually" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"Are there any graphs in the video?" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"Are there any graphs or charts in this video?" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"Does the video show any charts?" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"What can you see in the video?" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"What's visible in the frames?" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"Show me what's in the video" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"What objects are shown?" → intent: detect_objects, required_data: [frames, objects]
 "Create a PDF report" → intent: report, output_type: pdf, required_data: [transcription, visual_analysis]
 "Generate a PowerPoint presentation" → intent: report, output_type: ppt, required_data: [transcription, visual_analysis]
-"What objects are shown?" → intent: detect_objects, required_data: [frames, objects]
+
+IMPORTANT: Any question about visual content, what's shown, graphs, charts, or asking to see/describe video content should use intent: visual_analysis with required_data: [frames, visual_analysis]
 
 Return ONLY valid JSON."""
 
@@ -328,6 +362,15 @@ Return ONLY valid JSON."""
         # Track intermediate results for dependent tools
         intermediate_data = {}
         
+        #JD
+        # Load cached frames if available (for multi-frame operations)
+        cached_frames = cache.get("frames")
+        if cached_frames:
+            intermediate_data["frames"] = cached_frames.get("frames", [])
+            intermediate_data["total_frames"] = cached_frames.get("total_frames", 0)
+            logger.info(f"📦 Loaded {intermediate_data['total_frames']} cached frames for multi-frame operations")
+        #JD
+
         for tool_spec in tools_plan:
             agent = tool_spec["agent"]
             tool = tool_spec["tool"]
@@ -442,12 +485,108 @@ Return ONLY valid JSON."""
                 }
             
             elif tool == "detect_objects":
-                frame_path = f"{temp_dir}/{video_id}_frame_0.jpg"
-                return await self.client.detect_objects(frame_path)
+                # Analyze 10 evenly-distributed frames for better coverage
+                # Get frames list and total count from intermediate_data
+                frames_list = intermediate_data.get("frames", [])
+                total_frames = intermediate_data.get("total_frames", 0)
+                
+                if total_frames == 0 or not frames_list:
+                    return {"error": "No frames available for object detection"}
+                
+                # Sample 10 frames evenly distributed (or less if video is short)
+                num_samples = min(10, total_frames)
+                sample_indices = [int(i * total_frames / num_samples) for i in range(num_samples)]
+                
+                all_detections = []
+                frame_detections = []
+                
+                for idx in sample_indices:
+                    frame_path = f"{temp_dir}/{video_id}_frame_{idx}.jpg"
+                    try:
+                        result = await self.client.detect_objects(frame_path)
+                        
+                        if result.get("success"):
+                            objects = result.get("objects", [])
+                            # Add frame index to each detection
+                            for obj in objects:
+                                obj["frame_index"] = idx
+                                obj["timestamp"] = idx  # Approximate timestamp
+                            
+                            all_detections.extend(objects)
+                            frame_detections.append({
+                                "frame_index": idx,
+                                "timestamp": idx,
+                                "objects_count": len(objects),
+                                "objects": objects
+                            })
+                    except Exception as e:
+                        logger.error(f"Error detecting objects in frame {idx}: {e}")
+                
+                # Aggregate object counts by class
+                object_summary = {}
+                for obj in all_detections:
+                    obj_class = obj["class"]
+                    if obj_class not in object_summary:
+                        object_summary[obj_class] = {"count": 0, "max_confidence": 0.0}
+                    object_summary[obj_class]["count"] += 1
+                    object_summary[obj_class]["max_confidence"] = max(
+                        object_summary[obj_class]["max_confidence"],
+                        obj["confidence"]
+                    )
+                
+                return {
+                    "success": True,
+                    "all_objects": all_detections,
+                    "total_detected": len(all_detections),
+                    "frames_analyzed": num_samples,
+                    "frame_detections": frame_detections,
+                    "object_summary": object_summary,
+                    "model": "yolov8n"
+                }
             
             elif tool == "extract_text":
-                frame_path = f"{temp_dir}/{video_id}_frame_0.jpg"
-                return await self.client.extract_text(frame_path)
+                # Extract text from multiple frames for better coverage
+                frames_list = intermediate_data.get("frames", [])
+                total_frames = intermediate_data.get("total_frames", 0)
+                
+                if total_frames == 0 or not frames_list:
+                    # Fallback to single frame
+                    frame_path = f"{temp_dir}/{video_id}_frame_0.jpg"
+                    return await self.client.extract_text(frame_path)
+                
+                # Sample 10 frames evenly distributed
+                num_samples = min(10, total_frames)
+                sample_indices = [int(i * total_frames / num_samples) for i in range(num_samples)]
+                
+                all_text = []
+                frame_texts = []
+                
+                for idx in sample_indices:
+                    frame_path = f"{temp_dir}/{video_id}_frame_{idx}.jpg"
+                    try:
+                        result = await self.client.extract_text(frame_path)
+                        text = result.get("text", "")
+                        
+                        if text and len(text.strip()) > 0:
+                            frame_texts.append({
+                                "frame_index": idx,
+                                "timestamp": idx,
+                                "text": text
+                            })
+                            all_text.append(text)
+                    except Exception as e:
+                        logger.error(f"Error extracting text from frame {idx}: {e}")
+                
+                # Combine all text
+                combined_text = "\n\n".join(all_text)
+                
+                return {
+                    "success": True,
+                    "text": combined_text,
+                    "frames_analyzed": num_samples,
+                    "frames_with_text": len(frame_texts),
+                    "frame_texts": frame_texts
+                }
         
         return {"error": f"Unknown tool: {agent}.{tool}"}
     
@@ -480,7 +619,7 @@ Return ONLY valid JSON."""
             return await self._synthesize_summary(user_query, all_data, cache, output_type == "pdf")
         
         elif intent == "visual_analysis":
-            return await self._synthesize_visual_analysis(all_data)
+            return await self._synthesize_visual_analysis(user_query, all_data)
         
         elif intent == "detect_objects":
             return await self._synthesize_objects(all_data)
@@ -737,7 +876,7 @@ Return JSON:
             return None
     
     def _format_visual_summary(self, visual_data: Dict[str, Any]) -> str:
-        """Format visual analysis for report inclusion"""
+        """Format visual analysis for report inclusion with enhanced details"""
         if not isinstance(visual_data, dict):
             return ""
         
@@ -745,9 +884,33 @@ Return JSON:
         if not frame_analyses:
             return ""
         
-        summary = f"Analyzed {len(frame_analyses)} frames:\n"
-        for frame in frame_analyses[:5]:  # Include top 5 frames
-            summary += f"• Frame {frame.get('frame')} ({frame.get('timestamp', 0):.1f}s): {frame.get('description', '')[:100]}\n"
+        summary = f"Analyzed {len(frame_analyses)} frames with comprehensive visual analysis\n\n"
+        
+        # Include more detailed frame information for reports
+        for i, frame in enumerate(frame_analyses[:10], 1):  # Include top 10 frames
+            timestamp = frame.get('timestamp', 0)
+            minutes = int(timestamp // 60)
+            seconds = int(timestamp % 60)
+            time_str = f"{minutes:02d}:{seconds:02d}"
+            
+            description = frame.get('description', 'No description')
+            objects = frame.get('objects', [])
+            text_content = frame.get('text', '')
+            
+            summary += f"{i}. [{time_str}] {description}\n"
+            
+            if objects:
+                summary += f"   Objects detected: {', '.join(objects[:8])}\n"
+            
+            if text_content:
+                cleaned_text = self._clean_ocr_text(text_content)[:150]
+                if cleaned_text:
+                    summary += f"   On-screen text: \"{cleaned_text}\"\n"
+            
+            summary += "\n"
+        
+        if len(frame_analyses) > 10:
+            summary += f"...and {len(frame_analyses) - 10} additional frames analyzed\n"
         
         return summary
     
@@ -781,101 +944,347 @@ Return JSON:
         
         return response
     
-    async def _synthesize_visual_analysis(self, data: Dict[str, Any]) -> str:
-        """Return visual analysis results"""
+    async def _synthesize_visual_analysis(self, user_query: str, data: Dict[str, Any]) -> str:
+        """Return visual analysis results with LLM-generated insights that directly answer the user's question"""
         visual_data = data.get("visual_analysis", {})
         frame_analyses = visual_data.get("frame_analyses", []) if isinstance(visual_data, dict) else []
         
         if not frame_analyses:
             return "❌ No visual analysis available."
         
-        response = f"🎬 **Visual Analysis ({len(frame_analyses)} frames):**\n\n"
-        for frame in frame_analyses[:10]:
-            response += f"**Frame {frame.get('frame')} ({frame.get('timestamp', 0):.1f}s):**\n"
-            response += f"{frame.get('description', 'No description')}\n\n"
+        # Prepare frame descriptions for LLM analysis
+        frames_text = ""
+        for i, frame in enumerate(frame_analyses[:15], 1):  # Use up to 15 frames
+            timestamp = frame.get('timestamp', 0)
+            minutes = int(timestamp // 60)
+            seconds = int(timestamp % 60)
+            time_str = f"{minutes:02d}:{seconds:02d}"
+            
+            description = frame.get('description', 'No description')
+            objects = frame.get('objects', [])
+            text_content = frame.get('text', '')
+            
+            frames_text += f"{i}. [{time_str}] {description}"
+            if objects:
+                frames_text += f" | Objects: {', '.join(objects[:5])}"
+            if text_content:
+                cleaned = self._clean_ocr_text(text_content)[:100]
+                if cleaned:
+                    frames_text += f" | Text: \"{cleaned}\""
+            frames_text += "\n"
         
-        return response
+        # Use LLM to generate comprehensive visual summary
+        prompt = f"""You are analyzing a video to answer the user's question.
+
+User's Question: "{user_query}"
+
+Total frames analyzed: {len(frame_analyses)}
+
+Frame descriptions:
+{frames_text}
+
+IMPORTANT: 
+1. First, carefully read through ALL frame descriptions
+2. Look for evidence that answers the user's question (e.g., if they ask about graphs/charts, look for mentions of "bar graph", "chart", "pie chart", "line graph", "data visualization", etc.)
+3. Answer the question directly and honestly based on what you find
+4. Make sure your Direct Answer is consistent with your Brief Summary and Key Visual Elements
+
+Generate a response in this format:
+
+**Direct Answer:**
+(Answer the user's specific question directly based on visual evidence. Be specific - mention which frames if found, or clearly state if not found. Examples: "Yes, bar graphs are visible in frames 3 and 4" OR "No graphs or charts detected in the analyzed frames")
+
+**Brief Summary:**
+(2-3 sentences describing what the video shows overall - must be consistent with your Direct Answer)
+
+**Key Visual Elements:**
+(List 3-5 most important visual elements observed - must be consistent with your Direct Answer)
+
+CRITICAL: Ensure your Direct Answer, Brief Summary, and Key Visual Elements are all logically consistent. If you say "No" in Direct Answer, don't mention the item in the summary."""
+
+        try:
+            response = ollama.chat(
+                model=self.ollama_model,
+                messages=[
+                    {"role": "system", "content": "You are a video analysis expert. Answer questions directly and accurately based on visual evidence. Always ensure your responses are internally consistent - if you say something exists in your answer, mention it in the summary, and vice versa. Read carefully before answering."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            
+            llm_summary = response["message"]["content"]
+            
+            # Format final response - start with LLM analysis (includes direct answer)
+            result = f"🎬 **Visual Analysis**\n\n"
+            result += f"_Analyzed {len(frame_analyses)} frames_\n\n"
+            result += llm_summary
+            
+            # Add all frame details in a compact format
+            result += f"\n\n---\n\n"
+            result += f"**📋 Frame-by-Frame Details:**\n\n"
+            
+            # Show all frames with compact formatting
+            for i, frame in enumerate(frame_analyses, 1):
+                timestamp = frame.get('timestamp', 0)
+                minutes = int(timestamp // 60)
+                seconds = int(timestamp % 60)
+                time_str = f"{minutes:02d}:{seconds:02d}"
+                description = frame.get('description', 'No description')
+                
+                # Compact format: Frame number + timestamp + description
+                result += f"**{i}. [{time_str}]** {description}\n\n"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error generating visual summary with LLM: {e}")
+            # Fallback to simple list
+            response = f"🎬 **Visual Analysis ({len(frame_analyses)} frames):**\n\n"
+            for frame in frame_analyses[:10]:
+                timestamp = frame.get('timestamp', 0)
+                minutes = int(timestamp // 60)
+                seconds = int(timestamp % 60)
+                time_str = f"{minutes:02d}:{seconds:02d}"
+                response += f"**{time_str}** - {frame.get('description', 'No description')}\n\n"
+            return response
     
     async def _synthesize_objects(self, data: Dict[str, Any]) -> str:
-        """Return object detection results"""
+        """Return object detection results with LLM-generated summary"""
         objects_data = data.get("objects", {})
         
         # Check if we have object detection data
         if not objects_data or not isinstance(objects_data, dict):
             return "❌ No object detection data available."
         
-        detected_objects = objects_data.get("objects", [])
+        # Handle new multi-frame format
+        all_objects = objects_data.get("all_objects", [])
+        object_summary = objects_data.get("object_summary", {})
+        frames_analyzed = objects_data.get("frames_analyzed", 1)
+        frame_detections = objects_data.get("frame_detections", [])
         
-        if not detected_objects:
+        # Fallback to old single-frame format
+        if not all_objects:
+            all_objects = objects_data.get("objects", [])
+        
+        if not all_objects:
             return "❌ No objects detected in video."
         
-        # Build response with object details
-        response = f"🔍 **Detected Objects ({len(detected_objects)} total):**\n\n"
+        # Prepare data for LLM analysis
+        sorted_summary = sorted(object_summary.items(), key=lambda x: x[1]["count"], reverse=True) if object_summary else []
         
-        # Group objects by class and count
-        from collections import Counter
-        object_counts = Counter()
-        object_details = []
+        # Build object summary text for LLM
+        objects_text = ""
+        for obj_class, obj_data in sorted_summary:
+            count = obj_data["count"]
+            max_conf = obj_data["max_confidence"] * 100
+            objects_text += f"- {obj_class}: {count} instances (max confidence: {max_conf:.1f}%)\n"
         
-        for obj in detected_objects:
-            if isinstance(obj, dict):
-                obj_class = obj.get("class", obj.get("label", "unknown"))
-                confidence = obj.get("confidence", 0.0)
-                bbox = obj.get("bbox", obj.get("box", {}))
-                
-                object_counts[obj_class] += 1
-                object_details.append({
-                    "class": obj_class,
-                    "confidence": confidence,
-                    "bbox": bbox
-                })
+        # Get frame distribution info
+        frame_distribution = ""
+        for frame_det in frame_detections[:5]:  # First 5 frames
+            frame_idx = frame_det.get("frame_index", "?")
+            obj_count = frame_det.get("objects_count", 0)
+            frame_objs = frame_det.get("objects", [])
+            obj_types = list(set([o.get("class", "unknown") for o in frame_objs]))
+            frame_distribution += f"Frame {frame_idx}: {', '.join(obj_types[:3])}\n"
         
-        # Show summary by class
-        response += "**Object Summary:**\n"
-        for obj_class, count in object_counts.most_common():
-            response += f"• {obj_class}: {count} instance{'s' if count > 1 else ''}\n"
-        
-        response += "\n**Detailed Detections:**\n"
-        for i, obj in enumerate(object_details[:20], 1):  # Show top 20
-            conf_percent = obj["confidence"] * 100 if obj["confidence"] <= 1.0 else obj["confidence"]
-            response += f"{i}. **{obj['class']}** - Confidence: {conf_percent:.1f}%\n"
-            
-            if obj.get("bbox"):
-                bbox = obj["bbox"]
-                if isinstance(bbox, dict):
-                    response += f"   Location: x={bbox.get('x', 0):.0f}, y={bbox.get('y', 0):.0f}, w={bbox.get('width', 0):.0f}, h={bbox.get('height', 0):.0f}\n"
-        
-        if len(object_details) > 20:
-            response += f"\n_...and {len(object_details) - 20} more objects_"
-        
-        return response
-    
-    async def _synthesize_text(self, data: Dict[str, Any]) -> str:
-        """Return extracted text"""
-        text_data = data.get("text", {})
-        extracted_text = text_data.get("text", "") if isinstance(text_data, dict) else ""
-        
-        if not extracted_text:
-            return "❌ No text detected in video."
-        
-        return f"📄 **Extracted Text:**\n\n{extracted_text}"
-    
-    async def _synthesize_chat(self, user_query: str, data: Dict[str, Any]) -> str:
-        """Generate chat response using available data"""
-        # Use LLM to answer question based on available data
-        context = f"User asked: {user_query}\n\nAvailable data: {json.dumps(data, indent=2)[:2000]}"
-        
+        # Use LLM to generate intelligent summary
+        prompt = f"""Analyze these object detection results from a video and provide a natural, insightful summary.
+
+Detection Data:
+- Total detections: {len(all_objects)}
+- Frames analyzed: {frames_analyzed}
+- Unique object types: {len(object_summary)}
+
+Objects found:
+{objects_text}
+
+Sample frame distribution:
+{frame_distribution}
+
+Generate a response with these sections:
+
+**Summary:**
+(2-3 sentences describing what the video shows based on detected objects)
+
+**Objects Detected:**
+(List only the most significant/relevant objects, not all. Group related items if appropriate)
+
+**Observations:**
+(1-2 insightful observations about the scene, patterns, or context)
+
+Keep it concise, natural, and focus on what matters most."""
+
         try:
             response = ollama.chat(
                 model=self.ollama_model,
                 messages=[
-                    {"role": "system", "content": "Answer the user's question about the video based on available analysis data."},
+                    {"role": "system", "content": "You are a video analysis expert. Provide clear, natural summaries of object detection results."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            
+            llm_summary = response["message"]["content"]
+            
+            # Add technical details at the end
+            result = f"🔍 **Object Detection Analysis**\n\n"
+            result += f"_Analyzed {frames_analyzed} frames • {len(all_objects)} total detections • {len(object_summary)} unique object types_\n\n"
+            result += llm_summary
+            result += f"\n\n---\n\n"
+            result += f"**Technical Details:**\n"
+            result += f"• Most common: {sorted_summary[0][0]} ({sorted_summary[0][1]['count']} instances)\n" if sorted_summary else ""
+            result += f"• Detection confidence: {sorted_summary[0][1]['max_confidence']*100:.1f}% average\n" if sorted_summary else ""
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error generating object summary with LLM: {e}")
+            # Fallback to simple list if LLM fails
+            response = f"🔍 **Detected Objects ({len(all_objects)} total):**\n\n"
+            response += f"_Analyzed {frames_analyzed} frames_\n\n"
+            for obj_class, obj_data in sorted_summary[:10]:
+                count = obj_data["count"]
+                response += f"• {obj_class}: {count} instance{'s' if count > 1 else ''}\n"
+            return response
+    
+    async def _synthesize_text(self, data: Dict[str, Any]) -> str:
+        """Return extracted text with LLM-generated analysis"""
+        text_data = data.get("text", {})
+        
+        # Handle different data formats
+        if isinstance(text_data, dict):
+            extracted_text = text_data.get("text", "")
+            frames_analyzed = text_data.get("frames_analyzed", 1)
+            frames_with_text = text_data.get("frames_with_text", 0)
+        else:
+            extracted_text = str(text_data) if text_data else ""
+            frames_analyzed = 1
+            frames_with_text = 1 if extracted_text else 0
+        
+        # Clean the text
+        cleaned_text = self._clean_ocr_text(extracted_text)
+        
+        if not cleaned_text or len(cleaned_text.strip()) < 5:
+            return f"❌ No text detected in video.\n\n_Analyzed {frames_analyzed} frames, found text in {frames_with_text} frames_"
+        
+        # Use LLM to analyze and format the extracted text
+        prompt = f"""Analyze this text extracted from a video via OCR and provide insights.
+
+Note: This text has been cleaned of OCR artifacts and noise. If the remaining text seems fragmented or unclear, it may indicate poor OCR quality or complex visual content.
+
+Extracted Text:
+{cleaned_text[:2000]}
+
+Generate a response with these sections:
+
+**Text Summary:**
+(1-2 sentences describing what type of content this text represents - e.g., presentation slides, subtitles, on-screen text, document, etc.)
+
+**Key Information:**
+(List the most important information found in the text - main points, titles, key terms. If the text is too fragmented to extract meaningful information, say so.)
+
+**Content Type:**
+(Identify the likely source/context - presentation, tutorial, interview, advertisement, etc.)
+
+**OCR Quality Note:**
+(If the text appears heavily fragmented or contains many errors, briefly note this. Otherwise, skip this section.)
+
+Keep it concise and practical. If the OCR quality is very poor and text is meaningless, be honest about it."""
+
+        try:
+            response = ollama.chat(
+                model=self.ollama_model,
+                messages=[
+                    {"role": "system", "content": "You are an OCR text analysis expert. Provide clear, actionable insights from extracted text."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            
+            llm_analysis = response["message"]["content"]
+            
+            # Format response
+            result = f"📄 **Extracted Text Analysis**\n\n"
+            result += f"_Analyzed {frames_analyzed} frames • Found text in {frames_with_text} frames • {len(cleaned_text)} characters total_\n\n"
+            result += llm_analysis
+            result += f"\n\n---\n\n"
+            result += f"**📝 Raw Extracted Text:**\n\n"
+            
+            # Show text with smart truncation
+            if len(cleaned_text) <= 1000:
+                result += f"```\n{cleaned_text}\n```\n"
+            else:
+                result += f"```\n{cleaned_text[:800]}\n```\n"
+                result += f"\n_...and {len(cleaned_text) - 800} more characters. Ask 'Show full extracted text' to see complete text._\n"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error analyzing extracted text with LLM: {e}")
+            # Fallback to simple display
+            return f"📄 **Extracted Text:**\n\n{cleaned_text[:1000]}"
+    
+    async def _synthesize_chat(self, user_query: str, data: Dict[str, Any]) -> str:
+        """Generate chat response using available data"""
+        # Build comprehensive context from all available data
+        context_parts = []
+        
+        # Add transcription if available
+        transcription_data = data.get("transcription", {})
+        if transcription_data:
+            transcript_text = self._format_transcript(transcription_data)
+            if transcript_text:
+                context_parts.append(f"**Video Transcript:**\n{transcript_text[:1500]}")
+        
+        # Add visual analysis if available
+        visual_data = data.get("visual_analysis", {})
+        if visual_data:
+            frame_analyses = visual_data.get("frame_analyses", [])
+            if frame_analyses:
+                visual_summary = "**Visual Content:**\n"
+                for frame in frame_analyses[:8]:
+                    timestamp = frame.get('timestamp', 0)
+                    minutes = int(timestamp // 60)
+                    seconds = int(timestamp % 60)
+                    visual_summary += f"[{minutes:02d}:{seconds:02d}] {frame.get('description', '')}; "
+                context_parts.append(visual_summary[:800])
+        
+        # Add object detection if available
+        objects_data = data.get("objects", {})
+        if objects_data:
+            object_summary = objects_data.get("object_summary", {})
+            if object_summary:
+                objects_text = "**Detected Objects:** "
+                sorted_objs = sorted(object_summary.items(), key=lambda x: x[1]["count"], reverse=True)
+                objects_text += ", ".join([f"{obj}({count['count']})" for obj, count in sorted_objs[:10]])
+                context_parts.append(objects_text)
+        
+        # Add extracted text if available
+        text_data = data.get("text", {})
+        if text_data:
+            extracted = text_data.get("text", "")
+            if extracted:
+                cleaned = self._clean_ocr_text(extracted)[:500]
+                if cleaned:
+                    context_parts.append(f"**On-screen Text:** {cleaned}")
+        
+        context = f"""User Question: "{user_query}"
+
+Video Analysis Data:
+{chr(10).join(context_parts)}
+
+Answer the user's question naturally based on the available video analysis data. Be specific and cite timestamps when relevant. If the data doesn't contain enough information to answer, say so honestly."""
+
+        try:
+            response = ollama.chat(
+                model=self.ollama_model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful video analysis assistant. Answer questions about videos based on transcripts, visual analysis, and detected objects. Be conversational but accurate."},
                     {"role": "user", "content": context}
                 ]
             )
             return response["message"]["content"]
-        except:
-            return "I couldn't generate a response. Please try again."
+        except Exception as e:
+            logger.error(f"Error generating chat response: {e}")
+            return "I encountered an error while analyzing the video data. Please try rephrasing your question or ask for a different type of analysis."
     
     # ============================================================
     # MAIN ORCHESTRATION FLOW

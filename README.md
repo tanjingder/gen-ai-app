@@ -2,16 +2,7 @@
 
 A fully offline AI desktop application for analyzing and querying short video files with multi-agent architecture.
 
-## � Latest Update (Oct 2025)
-
-✅ **Native gRPC Architecture** - Frontend now connects directly via gRPC (no REST API)  
-✅ **Stdio MCP Agents** - Agents spawn on-demand via stdio (no HTTP servers)  
-✅ **Simplified Deployment** - One backend process, agents spawn as needed  
-✅ **Type-Safe Communication** - Rust gRPC client with protobuf definitions  
-
-See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for details.
-
-## �🏗️ Architecture
+## 🏗️ Architecture
 
 ```
 [Frontend: React + Tauri Desktop App]
@@ -144,7 +135,7 @@ ollama pull llava       # Vision analysis model (~4.5 GB)
 
 > **💡 Tip:** Run `verify-setup.bat` after installation to check if all prerequisites are properly installed.
 
-## � Quick Start (5 Minutes)
+## Quick Start (5 Minutes)
 
 ### 1. Clone Repository
 
@@ -308,13 +299,13 @@ The backend uses Ollama as the planning LLM to:
 - Local file system access only
 - Desktop sandboxing via Tauri
 
-## � Documentation
+## Documentation
 
 - **[Quick Start Guide](QUICKSTART.md)** - Complete setup and usage instructions
 - **[Architecture](docs/ARCHITECTURE.md)** - Software architecture and design patterns
 - **[Scripts Documentation](scripts/README.md)** - All batch script references
 
-## �📄 License
+##📄 License
 
 MIT License
 

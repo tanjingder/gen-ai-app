@@ -116,9 +116,9 @@ export default function ChatInterface({ videoId, isConnected, initialMessages = 
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full overflow-hidden">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0">
         {messages.length === 0 && (
           <div className="flex items-center justify-center h-full text-gray-400">
             <div className="text-center">
@@ -135,10 +135,10 @@ export default function ChatInterface({ videoId, isConnected, initialMessages = 
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+            className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} w-full min-w-0`}
           >
             <div
-              className={`max-w-[70%] rounded-lg p-3 ${
+              className={`max-w-[70%] min-w-0 rounded-lg p-3 break-words ${
                 message.sender === "user"
                   ? "bg-blue-600 text-white"
                   : message.sender === "assistant"
@@ -147,16 +147,16 @@ export default function ChatInterface({ videoId, isConnected, initialMessages = 
               }`}
             >
               {message.agentInfo && (
-                <div className="text-xs opacity-75 mb-1">
+                <div className="text-xs opacity-75 mb-1 break-words">
                   🤖 {message.agentInfo.agentName}: {message.agentInfo.action}
                 </div>
               )}
-              <div className="prose prose-invert max-w-none prose-sm">
+              <div className="prose prose-invert max-w-none prose-sm break-words overflow-wrap-anywhere">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {message.text}
                 </ReactMarkdown>
               </div>
-              <div className="text-xs opacity-50 mt-1">
+              <div className="text-xs opacity-50 mt-1 break-words">
                 {new Date(message.timestamp).toLocaleTimeString()}
               </div>
             </div>
@@ -176,8 +176,8 @@ export default function ChatInterface({ videoId, isConnected, initialMessages = 
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-700 p-4 bg-gray-800">
-        <div className="flex gap-2">
+      <div className="border-t border-gray-700 p-4 bg-gray-800 flex-shrink-0">
+        <div className="flex gap-2 w-full min-w-0">
           <input
             type="text"
             value={input}

@@ -146,7 +146,7 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
+    <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
       {/* Session Sidebar */}
       <SessionList
         currentSessionId={currentSessionId}
@@ -156,12 +156,12 @@ function App() {
       />
       
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header isConnected={isConnected} currentVideo={currentVideo} />
         
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-w-0">
           {/* Video Upload Sidebar */}
-          <div className="w-80 bg-gray-800 border-r border-gray-700 p-4">
+          <div className="w-80 flex-shrink-0 bg-gray-800 border-r border-gray-700 p-4 overflow-y-auto">
             <VideoUpload onVideoUploaded={handleVideoUploaded} currentVideo={currentVideo} />
             
             {currentVideo && (
@@ -197,7 +197,7 @@ function App() {
           </div>
 
           {/* Main Chat Area */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             <ChatInterface 
               key={currentSessionId || 'no-session'} // Force re-render when session changes
               videoId={currentVideo?.id} 

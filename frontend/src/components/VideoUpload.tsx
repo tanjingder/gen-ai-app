@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Upload, X, CheckCircle } from "lucide-react";
+import { Upload, CheckCircle } from "lucide-react";
 import { grpcClient } from "../services/grpcClient";
 import { VideoInfo } from "../types";
 
@@ -12,7 +12,6 @@ export default function VideoUpload({ onVideoUploaded, currentVideo }: VideoUplo
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -66,7 +65,6 @@ export default function VideoUpload({ onVideoUploaded, currentVideo }: VideoUplo
 
       clearInterval(progressInterval);
       setUploadProgress(100);
-      setUploadedFile(file.name);
       
       setTimeout(() => {
         onVideoUploaded(videoInfo);
@@ -81,18 +79,11 @@ export default function VideoUpload({ onVideoUploaded, currentVideo }: VideoUplo
     }
   };
 
-  const handleClearUpload = () => {
-    setUploadedFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
   return (
     <div className="w-full">
       <h2 className="text-lg font-semibold mb-4">Upload Video</h2>
 
-      {!uploadedFile ? (
+      {!currentVideo ? (
         <div
           className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
             currentVideo
@@ -152,20 +143,17 @@ export default function VideoUpload({ onVideoUploaded, currentVideo }: VideoUplo
         </div>
       ) : (
         <div className="border border-green-500 rounded-lg p-4 bg-green-500/10">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-              <div>
-                <p className="text-green-400 font-medium">Video Uploaded</p>
-                <p className="text-sm text-gray-300 truncate">{uploadedFile}</p>
-              </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-green-400 font-medium">Video Uploaded</p>
+              <p 
+                className="text-sm text-gray-300 truncate max-w-full" 
+                title={currentVideo?.filename}
+              >
+                {currentVideo?.filename}
+              </p>
             </div>
-            <button
-              onClick={handleClearUpload}
-              className="text-gray-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
         </div>
       )}

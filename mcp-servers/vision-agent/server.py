@@ -178,10 +178,26 @@ class VisionAgent:
             
             try:
                 # Use Ultralytics YOLO for object detection
-                from ultralytics import YOLO
+                import torch
                 
-                # Load YOLOv8 model (will auto-download on first use)
-                model = YOLO('yolov8n.pt')  # nano model for speed
+                # Fix for PyTorch 2.6+ weights_only default change
+                # Temporarily override torch.load to use weights_only=False for YOLO models
+                _original_torch_load = torch.load
+                
+                def _patched_torch_load(*args, **kwargs):
+                    # Force weights_only=False for loading YOLO models (safe for official models)
+                    kwargs['weights_only'] = False
+                    return _original_torch_load(*args, **kwargs)
+                
+                torch.load = _patched_torch_load
+                
+                try:
+                    from ultralytics import YOLO
+                    # Load YOLOv8 model (will auto-download on first use)
+                    model = YOLO('yolov8n.pt')  # nano model for speed
+                finally:
+                    # Restore original torch.load
+                    torch.load = _original_torch_load
                 
                 # Run inference
                 results = model(str(frame_file), verbose=False)
