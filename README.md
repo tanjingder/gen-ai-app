@@ -9,7 +9,7 @@ A fully offline AI desktop application for analyzing and querying short video fi
 ✅ **Simplified Deployment** - One backend process, agents spawn as needed  
 ✅ **Type-Safe Communication** - Rust gRPC client with protobuf definitions  
 
-See [ARCHITECTURE.md](./docs/ARCHITECTURE_UPDATE.md) for details.
+See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for details.
 
 ## �🏗️ Architecture
 
