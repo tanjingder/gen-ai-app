@@ -9,7 +9,7 @@ A fully offline AI desktop application for analyzing and querying short video fi
 ✅ **Simplified Deployment** - One backend process, agents spawn as needed  
 ✅ **Type-Safe Communication** - Rust gRPC client with protobuf definitions  
 
-See [ARCHITECTURE_UPDATE.md](./ARCHITECTURE_UPDATE.md) for details.
+See [ARCHITECTURE.md](./docs/ARCHITECTURE_UPDATE.md) for details.
 
 ## �🏗️ Architecture
 
@@ -45,7 +45,6 @@ See [ARCHITECTURE_UPDATE.md](./ARCHITECTURE_UPDATE.md) for details.
 gen-ai-app/
 ├── backend/                    # Python backend service
 │   ├── src/
-│   │   ├── agents/            # Agent implementations
 │   │   ├── grpc_server/       # gRPC server implementation
 │   │   ├── mcp/               # MCP client/orchestrator
 │   │   ├── models/            # Data models
