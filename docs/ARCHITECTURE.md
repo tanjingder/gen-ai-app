@@ -5,28 +5,28 @@
 ## System Architecture
 
 ```
-
-   Frontend (Tauri Desktop App)          
-   React + TypeScript                    
-
-              gRPC (Port 50051)
-             
-
-   Backend (Python gRPC Server)          
-    Session Manager                    
-    Video Store                        
-    MCP Orchestrator                   
-
-             
-      
-                   
-                   
-  
-  Ollama       MCP Agents      
- llama3.2      Transcription 
- llava         Vision        
-    Report        
-               
+┌─────────────────────────────────────────┐
+│   Frontend (Tauri Desktop App)          │
+│   React + TypeScript                    │
+└────────────┬────────────────────────────┘
+             │ gRPC (Port 50051)
+             ▼
+┌─────────────────────────────────────────┐
+│   Backend (Python gRPC Server)          │
+│   ├─ Session Manager                    │
+│   ├─ Video Store                        │
+│   └─ MCP Orchestrator                   │
+└────────────┬────────────────────────────┘
+             │
+      ┌──────┴──────┐
+      │             │
+      ▼             ▼
+┌───────────┐  ┌──────────────────┐
+│  Ollama   │  │  MCP Agents      │
+│ llama3.2  │  │ ├─ Transcription │
+│ llava     │  │ ├─ Vision        │
+└───────────┘  │ └─ Report        │
+               └──────────────────┘
 ```
 
 ## Complete Process Flow
