@@ -61,6 +61,22 @@ Information script (legacy)
 
 ## 🔧 Utility Scripts
 
+### `verify-setup.bat`
+Verifies all prerequisites are properly installed
+- Checks core requirements (Git, Python, Node.js, Rust, Ollama, VS C++)
+- Checks agent tools (FFmpeg, Tesseract, Protoc, Whisper)
+- Validates Ollama models (llama3.2, llava)
+- Provides installation links for missing tools
+- Color-coded output (green=pass, red=fail, yellow=warning)
+
+**Usage:**
+```batch
+.\scripts\verify-setup.bat
+# Or from root: verify-setup.bat
+```
+
+**Run this before setup to ensure all prerequisites are installed!**
+
 ### `compile-proto.bat`
 Compiles protocol buffer definitions
 - Generates Python gRPC code
@@ -87,7 +103,13 @@ Downloads required Ollama AI models
 
 **First time setup:**
 ```batch
+# 1. Verify prerequisites
+.\scripts\verify-setup.bat
+
+# 2. Run setup
 .\scripts\setup-all.bat
+
+# 3. Download AI models
 .\scripts\download-models.bat
 ```
 

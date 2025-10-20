@@ -1,4 +1,4 @@
-# Local AI Video Analysis Desktop Application
+﻿# Local AI Video Analysis Desktop Application
 
 A fully offline AI desktop application for analyzing and querying short video files with multi-agent architecture.
 
@@ -102,42 +102,102 @@ gen-ai-app/
 
 ## 📋 Prerequisites
 
-- Python 3.11 or higher
-- Node.js 18+ and npm
-- Rust (for Tauri)
-- Ollama installed and running
-- At least 16GB RAM recommended
+### Core Requirements (Backend & Frontend)
 
-## 🔧 Quick Setup (Automated)
+Before starting, install these required software:
 
-### Windows - One Command Setup
+| Software | Version | Download Link | Notes |
+|----------|---------|---------------|-------|
+| **Git** | Latest | [Download](https://git-scm.com/downloads/win) | Version control |
+| **Ollama** | Latest | [Download](https://ollama.com/download/windows) | Local AI runtime |
+| **Python** | 3.11+ | [Microsoft Store](https://apps.microsoft.com/store/detail/python-311/9NRWMJP3717K) | Backend runtime |
+| **Node.js** | 18+ | [Download](https://nodejs.org/en/download) | Frontend tools |
+| **Visual Studio** | 2022+ | [Download](https://visualstudio.microsoft.com/) | C++ build tools (Desktop development with C++) |
+| **Rust** | Latest | [Download](https://rustup.rs/) | Tauri framework |
+
+### Agent Tools Requirements
+
+Additional tools required for MCP agents:
+
+| Tool | Purpose | Download Link | Installation Notes |
+|------|---------|---------------|-------------------|
+| **FFmpeg** | Audio extraction | [Download](https://www.gyan.dev/ffmpeg/builds/) | Extract `ffmpeg-release-essentials.zip` and add `bin` folder to System Path |
+| **Tesseract OCR** | Text extraction | [Download](https://sourceforge.net/projects/tesseract-ocr.mirror/files/5.5.0/tesseract-ocr-w64-setup-5.5.0.20241111.exe/download) | Add installation folder to System Path |
+| **Protoc** | Protocol buffers | [Download](https://github.com/protocolbuffers/protobuf/releases) | Extract and add `bin` folder to System Path |
+| **whisper.cpp** | Audio transcription | [GitHub Releases](https://github.com/ggerganov/whisper.cpp/releases) | Download `whisper-bin-x64.zip`, extract to `mcp-servers/transcription-agent/whisper.cpp/` |
+| **ggml-base.bin** | Whisper model | [HuggingFace](https://huggingface.co/ggerganov/whisper.cpp/tree/main) | Download `ggml-base.bin` (~142 MB) to `mcp-servers/transcription-agent/models/` |
+
+### Ollama Models
+
+After installing Ollama, download required AI models:
+
+```powershell
+ollama serve
+ollama pull llama3.2    # Main reasoning model (~4.7 GB)
+ollama pull llava       # Vision analysis model (~4.5 GB)
+```
+
+### System Requirements
+
+- **RAM:** 16GB minimum, 32GB recommended
+- **Storage:** 20GB free space (for models and cache)
+- **OS:** Windows 10/11 (64-bit)
+
+> **💡 Tip:** Run `verify-setup.bat` after installation to check if all prerequisites are properly installed.
+
+## � Quick Start (5 Minutes)
+
+### 1. Clone Repository
+
+```powershell
+git clone https://github.com/tanjingder/gen-ai-app.git
+cd gen-ai-app
+```
+
+### 2. Verify Prerequisites
+
+Check if all required tools are installed:
+
+```batch
+scripts\verify-setup.bat
+```
+
+This will check:
+- Python, Node.js, Rust versions
+- Git, Ollama availability
+- FFmpeg, Tesseract, Protoc in PATH
+- Visual Studio C++ tools
+
+### 3. Run Setup
 
 ```batch
 setup.bat
-# Or directly: scripts\setup-all.bat
 ```
 
 This will:
 1. Set up Python backend with shared virtual environment
 2. Install all MCP agent dependencies (using shared venv)
 3. Set up Tauri frontend (Rust + Node.js dependencies)
+4. Compile protocol buffers
 
-### Starting the Application
+**Duration:** 5-10 minutes (depending on internet speed)
+
+### 4. Start Application
 
 ```batch
 start.bat
-# Or directly: scripts\start-all.bat
 ```
 
 This will:
-1. Start backend (gRPC server on port 50051)
-2. Start frontend (Tauri desktop application)
+1. Start Ollama (if not already running)
+2. Start backend (gRPC server on port 50051)
+3. Start frontend (Tauri desktop application)
 
 **Note:** MCP agents spawn automatically on-demand. No separate server processes needed!
 
 ---
 
-## 🔧 Manual Setup (If Needed)
+## 🔧 Manual Setup (If Automated Setup Fails)
 
 ### 1. Install Ollama
 
