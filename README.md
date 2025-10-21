@@ -294,7 +294,7 @@ The backend uses Ollama as the planning LLM to:
 - Models cached locally for fast inference
 
 ## Execution Notes
-Once the application has launched, upload any video of interest or video from sample_video by clicking the "Browse File" in the UI. After that, you can ask anything about that video.
+Once the application has launched, upload any video of interest or video from docs by clicking the "Browse File" in the UI. After that, you can ask anything about that video.
 
 Example Query:
   “Transcribe the video.”
@@ -303,7 +303,7 @@ Example Query:
   “What objects are shown in the video?”
   “Are there any graphs in the video? If yes, describe them.”
 
-There are also sample PDF and PPTX in the sample_pdf_pptx folder to refer.
+There are also sample PDF and PPTX in the docs folder to refer.
 
 ## Project Reflection
 
