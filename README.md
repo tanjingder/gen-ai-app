@@ -293,7 +293,7 @@ The backend uses Ollama as the planning LLM to:
 - Video files stored temporarily during processing
 - Models cached locally for fast inference
 
-## Project Reflection: Local AI Video Analysis Application
+## Project Reflection
 
 ### ✅ What Works?
 
@@ -305,7 +305,6 @@ The backend uses Ollama as the planning LLM to:
 **2. Audio Transcription**
 - Accurate speech-to-text conversion using Whisper.cpp (ggml-base.bin model)
 - Extracts full audio track from video files
-- Provides timestamped transcripts for easy reference
 - Handles multiple audio formats through FFmpeg preprocessing
 
 **3. Visual Content Analysis**
@@ -347,15 +346,7 @@ The backend uses Ollama as the planning LLM to:
   - "Are there any graphs or charts?" → `chat` ❌ (should be `visual_analysis`)
 - **Impact**: Wrong intent = wrong tools executed = poor responses
 
-**3. gRPC Connection Instability**
-- **Issue**: MCP server connections occasionally drop or timeout
-- **Symptoms**: 
-  - "Failed to connect to MCP server" errors
-  - Tools execute but responses don't return
-  - Server restarts required to restore functionality
-- **Root Cause**: Limited understanding of gRPC lifecycle management, error handling, and reconnection logic
-
-**4. LLM Tool Usage Confusion**
+**3. LLM Tool Usage Confusion**
 - **Issue**: LLM doesn't always understand when/how to use available tools
 - **Examples**:
   - User asks "What's in the video?" → LLM tries to answer without analyzing frames
@@ -369,28 +360,28 @@ The backend uses Ollama as the planning LLM to:
 **1. More Flexible, Natural LLM Responses**
 
 **Current State**: Rigid, structured output
-🎬 Visual Analysis
-Analyzed 6 frames
+    🎬 Visual Analysis
+    Analyzed 6 frames
 
-Direct Answer: [Yes/No answer]
-Brief Summary: [2-3 sentences]
-Key Visual Elements:
+    Direct Answer: [Yes/No answer]
+    Brief Summary: [2-3 sentences]
+    Key Visual Elements:
 
-Item 1
-Item 2
+    Item 1
+    Item 2
 
 **Improved State**: Conversational, context-aware responses
-Based on analyzing 6 frames throughout your video, I can see several bar graphs
-appearing around the 1:16 mark showing price trends, and another at 1:54
-displaying religious demographics over time. The video appears to be an
-educational presentation about data visualization techniques.
+    Based on analyzing 6 frames throughout your video, I can see several bar graphs
+    appearing around the 1:16 mark showing price trends, and another at 1:54
+    displaying religious demographics over time. The video appears to be an
+    educational presentation about data visualization techniques.
 
-The most prominent charts are:
+    The most prominent charts are:
 
-A price trend graph with daily data (frame 3)
-A demographics bar chart showing religious affiliations by age (frame 4)
-A 5K race runners distribution chart (frame 5)
-Would you like me to provide more details about any specific chart?
+    A price trend graph with daily data (frame 3)
+    A demographics bar chart showing religious affiliations by age (frame 4)
+    A 5K race runners distribution chart (frame 5)
+    Would you like me to provide more details about any specific chart?
 
 **Benefits**:
 - ✅ More engaging and human-like
@@ -468,12 +459,8 @@ d) **Contradictory Logic**
 
 **Why This Was Hard**:
 - Designing robust intent classification (many edge cases)
-- Defining clear boundaries between intents (visual_analysis vs chat vs detect_objects)
 - Creating comprehensive examples for each intent type
 - Balancing flexibility vs rigid tool execution
-
-**Breakthrough Moment**:
-Realized the LLM is better at **synthesizing results** than **deciding what to analyze**. Separating planning (intent analysis) from execution (orchestrator) from synthesis (final response) made the system more reliable.
 
 ### ⏰ What Could Be Achieved with More Time
 
@@ -505,37 +492,33 @@ Realized the LLM is better at **synthesizing results** than **deciding what to a
   - Only include relevant cached data in LLM prompt
   - Example: If user asks about timestamp 2:30, only load transcript/frames near that time
 
----
-
 #### **2. Model & Tool Improvements**
 
 **A. Better Vision Models**
-- **Upgrade to LLaVA 1.6 or GPT-4V** (if available locally)
+ **Upgrade to LLaVA 1.6 or GPT-4V** (if available locally)
 - Higher accuracy for chart/graph recognition
-- Better OCR integration
-- **Specialized models for specific tasks**
+ **Specialized models for specific tasks**
 - Chart understanding model (e.g., ChartQA)
-- Code screenshot OCR model
 - Presentation slide analyzer
 
 **B. Enhanced Object Detection**
-- **Custom YOLOv8 training**
+ **Custom YOLOv8 training**
 - Fine-tune on domain-specific objects (charts, code, diagrams)
 - Improve confidence scores for ambiguous objects
-- **Object tracking across frames**
+ **Object tracking across frames**
 - Identify when the same object appears in multiple frames
 - "Person in frames 1-4 appears to be the same individual"
-- **Scene classification**
+ **Scene classification**
 - Detect scene types: presentation, coding demo, outdoor, interview
 - Adjust analysis strategy based on scene type
 
 **C. Improved Transcript Analysis**
-- **Speaker diarization** (who said what)
+ **Speaker diarization** (who said what)
 - Identify multiple speakers
 - Attribute quotes correctly
-- **Sentiment analysis**
+ **Sentiment analysis**
 - Detect tone: educational, promotional, informative
-- **Key phrase extraction**
+ **Key phrase extraction**
 - Automatically highlight important terms
 - Generate glossary of technical terms mentioned
 
@@ -554,12 +537,6 @@ Realized the LLM is better at **synthesizing results** than **deciding what to a
 - ❌ LLM response inconsistency and hallucinations
 - ❌ Rigid response formatting
 - ❌ No real-time or progressive analysis
-
-**Path Forward**:
-With more time, focus on:
-1. **Stability** → Fix gRPC, add retry logic, better error handling
-2. **Accuracy** → Fine-tune models, improve prompts, add confidence scoring
-3. **Performance** → Parallel execution, incremental results, smarter caching
 
 **Biggest Learning**:
 Building an AI orchestration system is more about **reliable infrastructure** and **careful prompt engineering** than raw model capabilities. The best LLM in the world won't help if the tool execution is unreliable or the prompts are ambiguous.
