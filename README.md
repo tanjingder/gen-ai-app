@@ -418,7 +418,48 @@ The backend uses Ollama as the planning LLM to:
 - Managing bidirectional streaming vs unary calls
 - Implementing proper error handling and graceful shutdowns
 
-#### **2. LLM Response Accuracy**
+#### **2. Hardware Limitation**
+
+**Challenge**: Insufficient computational resources for running transformer models directly
+
+**Initial Approach**: Direct HuggingFace Transformers Integration
+- Attempted to use `transformers` library to load models like `meta-llama/Llama-2-7b-chat-hf` directly
+- Required downloading multi-gigabyte model files (7B+ parameters)
+- Needed to load entire model into system RAM/VRAM
+
+**Problems Encountered**:
+ **System Resource Exhaustion**
+- Loading 7B parameter model required ~14GB RAM (FP16 precision)
+- System became unresponsive during model initialization
+- CPU-only inference was prohibitively slow (30+ seconds per response)
+- Windows Task Manager showed 95%+ memory usage, causing system-wide lag
+
+**Solution: Migration to Ollama**:
+
+ **Why Ollama Solved the Problem:**
+
+    1. Optimized Inference Engine
+
+    2. Built on llama.cpp - highly optimized C++ implementation
+        - 4-bit quantization by default (reduces memory by ~75%)
+        - Efficient memory management with context caching
+        - Model Management
+
+    3. Model Management
+        - Models stored in optimized GGUF format
+        - Lazy loading - only loads what's needed
+        - Multiple models can coexist without loading all simultaneously
+
+    4. Performance Gains
+        - 7B model (llama3.2) runs smoothly on 8GB RAM system
+        - Inference speed: ~20 tokens/second (vs. 1-2 tokens/sec with transformers)
+        - Application startup time reduced from minutes to seconds
+
+    5. Developer Experience
+        - Automatic model downloading and versioning
+        - Easy model switching (ollama pull <model>)
+
+#### **3. LLM Response Accuracy**
 
 **Challenge**: Local LLMs (Ollama llama3.2, llava) produce inconsistent results
 
