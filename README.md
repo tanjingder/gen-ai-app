@@ -439,8 +439,7 @@ The backend uses Ollama as the planning LLM to:
  **Why Ollama Solved the Problem:**
 
     1. Optimized Inference Engine
-
-    2. Built on llama.cpp - highly optimized C++ implementation
+        - Built on llama.cpp - highly optimized C++ implementation
         - 4-bit quantization by default (reduces memory by ~75%)
         - Efficient memory management with context caching
         - Model Management
