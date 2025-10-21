@@ -167,31 +167,38 @@ class MCPOrchestratorV2:
 
 User Query: "{user_query}"
 
-Return JSON with:
+Return JSON with EXACTLY ONE value for each field:
 {{
-  "intent": "summarize | transcribe | visual_analysis | detect_objects | extract_text | chat | report",
-  "output_type": "text | pdf | structured | chat_response",
-  "required_data": ["transcription", "frames", "visual_analysis", "objects", "text"],
+  "intent": "(choose ONE: summarize, transcribe, visual_analysis, detect_objects, extract_text, chat, or report)",
+  "output_type": "(choose ONE: text, pdf, ppt, structured, or chat_response)",
+  "required_data": ["array of needed data types"],
   "reasoning": "brief explanation of what user wants"
 }}
 
+IMPORTANT: Select ONLY ONE intent value, not multiple. For output_type, use "ppt" for PowerPoint requests.
+
 Intent Guidelines:
-- "summarize" → User wants full video summary (may include PDF/PPT)
+- "summarize" → User wants full video summary in TEXT format only (no PDF/PPT mentioned)
 - "transcribe" → User wants audio transcription only
 - "visual_analysis" → User wants to know what's shown visually (ANY question about graphs, charts, images, visuals, what's shown, what can be seen, etc.)
 - "detect_objects" → User wants specific object detection/counting (e.g., "what objects?", "detect items", "count people")
 - "extract_text" → User wants OCR text from video (e.g., "what text is shown?", "read the text")
 - "chat" → User asking a general question about video content or asking for interpretation/explanation AFTER having data
-- "report" → User explicitly asks for PDF/PPT report
+- "report" → User explicitly asks for PDF/PPT/PowerPoint report or wants to generate a document
 
-CRITICAL: If user asks about visual content (graphs, charts, what's shown, what's visible, etc.), ALWAYS use "visual_analysis" intent with required_data: [frames, visual_analysis]
+CRITICAL RULES:
+1. If user asks about visual content (graphs, charts, what's shown, what's visible, etc.) → ALWAYS use "visual_analysis" intent
+2. If query contains "PDF", "PPT", "PowerPoint", "presentation", or "report" → ALWAYS use "report" intent
+3. If user asks to "summarize into [format]" where format is PDF/PPT/PowerPoint → use "report" intent, NOT "summarize"
 
-Output Type:
-- "text" → Return plain text response
-- "pdf" → Generate PDF report
-- "ppt" → Generate PowerPoint presentation
-- "structured" → Return structured data
-- "chat_response" → Natural language answer
+Output Type Rules:
+- "text" → Plain text response for most queries (summaries, visual descriptions, Q&A)
+- "pdf" → ONLY if user explicitly asks for PDF ("create PDF", "generate PDF", "summarize to PDF")
+- "ppt" → ONLY if user explicitly asks for PowerPoint/PPT ("create PPT", "PowerPoint", "presentation")
+- "structured" → Return structured JSON data (rarely used)
+- "chat_response" → Natural language answer to questions
+
+IMPORTANT: Use "text" as default output_type. Only use "pdf" or "ppt" if explicitly requested.
 
 Required Data (what we need to answer):
 - "transcription" → Need audio transcription
@@ -201,22 +208,31 @@ Required Data (what we need to answer):
 - "text" → Need OCR text extraction
 
 Examples:
-"Summarize this video" → intent: summarize, required_data: [transcription, visual_analysis]
-"What is said in the video?" → intent: transcribe, required_data: [transcription]
-"Analyze the visual content" → intent: visual_analysis, required_data: [frames, visual_analysis]
-"What's shown in the video?" → intent: visual_analysis, required_data: [frames, visual_analysis]
-"Describe what's happening visually" → intent: visual_analysis, required_data: [frames, visual_analysis]
-"Are there any graphs in the video?" → intent: visual_analysis, required_data: [frames, visual_analysis]
-"Are there any graphs or charts in this video?" → intent: visual_analysis, required_data: [frames, visual_analysis]
+"Summarize this video" → intent: summarize, output_type: text, required_data: [transcription, visual_analysis]
+"What is said in the video?" → intent: transcribe, output_type: text, required_data: [transcription]
+"Analyze the visual content" → intent: visual_analysis, output_type: text, required_data: [frames, visual_analysis]
+"What's shown in the video?" → intent: visual_analysis, output_type: text, required_data: [frames, visual_analysis]
+"Describe what's happening visually" → intent: visual_analysis, output_type: text, required_data: [frames, visual_analysis]
+"Are there any graphs in the video?" → intent: visual_analysis, output_type: text, required_data: [frames, visual_analysis]
+"Are there any graphs or charts in this video?" → intent: visual_analysis, output_type: text, required_data: [frames, visual_analysis]
 "Does the video show any charts?" → intent: visual_analysis, required_data: [frames, visual_analysis]
 "What can you see in the video?" → intent: visual_analysis, required_data: [frames, visual_analysis]
-"What's visible in the frames?" → intent: visual_analysis, required_data: [frames, visual_analysis]
-"Show me what's in the video" → intent: visual_analysis, required_data: [frames, visual_analysis]
-"What objects are shown?" → intent: detect_objects, required_data: [frames, objects]
-"Create a PDF report" → intent: report, output_type: pdf, required_data: [transcription, visual_analysis]
-"Generate a PowerPoint presentation" → intent: report, output_type: ppt, required_data: [transcription, visual_analysis]
+"What's visible in the frames?" → intent: visual_analysis, output_type: text, required_data: [frames, visual_analysis]
+"Show me what's in the video" → intent: visual_analysis, output_type: text, required_data: [frames, visual_analysis]
+"What objects are shown?" → intent: detect_objects, output_type: text, required_data: [frames, objects]
+"Create a PDF report" → intent: report, output_type: pdf, required_data: [transcription, frames, visual_analysis]
+"Generate a PowerPoint presentation" → intent: report, output_type: ppt, required_data: [transcription, frames, visual_analysis]
+"Summarize this video into PDF" → intent: report, output_type: pdf, required_data: [transcription, frames, visual_analysis]
+"Can you summarize into PDF?" → intent: report, output_type: pdf, required_data: [transcription, frames, visual_analysis]
+"Can you summarize into PowerPoint?" → intent: report, output_type: ppt, required_data: [transcription, frames, visual_analysis]
+"Summarize into PPT" → intent: report, output_type: ppt, required_data: [transcription, frames, visual_analysis]
+"Make a presentation" → intent: report, output_type: ppt, required_data: [transcription, frames, visual_analysis]
+"Create a PPT" → intent: report, output_type: ppt, required_data: [transcription, frames, visual_analysis]
 
-IMPORTANT: Any question about visual content, what's shown, graphs, charts, or asking to see/describe video content should use intent: visual_analysis with required_data: [frames, visual_analysis]
+CRITICAL: 
+- Questions about visual content (graphs, charts, what's shown) → intent: visual_analysis, output_type: text
+- Report generation requests with PDF/PPT/PowerPoint → intent: report, output_type: pdf or ppt
+- Default output_type is "text" unless explicitly requesting PDF or PPT file
 
 Return ONLY valid JSON."""
 
@@ -224,13 +240,89 @@ Return ONLY valid JSON."""
             response = ollama.chat(
                 model=self.ollama_model,
                 messages=[
-                    {"role": "system", "content": "You are a query analysis expert. Determine user intent accurately."},
+                    {"role": "system", "content": "You are a query analysis expert. Return valid JSON with single values only - never return multiple options separated by pipes. For intent, choose exactly ONE value from: summarize, transcribe, visual_analysis, detect_objects, extract_text, chat, or report."},
                     {"role": "user", "content": prompt}
                 ],
                 format="json"
             )
             
             intent_data = json.loads(response["message"]["content"])
+            
+            # Validate and fix intent if it contains multiple values (pipe-separated)
+            intent_value = intent_data.get('intent', '')
+            if '|' in intent_value or ' ' in intent_value:
+                # LLM returned malformed intent - try to extract the correct one
+                query_lower = user_query.lower()
+                
+                # Check for explicit format requests first (highest priority)
+                if 'powerpoint' in query_lower or 'ppt' in query_lower or 'presentation' in query_lower:
+                    intent_data['intent'] = 'report'
+                    intent_data['output_type'] = 'ppt'
+                    logger.warning(f"Fixed malformed intent. Detected PowerPoint request → intent: report")
+                elif 'pdf' in query_lower:
+                    intent_data['intent'] = 'report'
+                    intent_data['output_type'] = 'pdf'
+                    logger.warning(f"Fixed malformed intent. Detected PDF request → intent: report")
+                elif 'summarize' in query_lower or 'summary' in query_lower:
+                    intent_data['intent'] = 'summarize'
+                    logger.warning(f"Fixed malformed intent. Detected summary request → intent: summarize")
+                else:
+                    intent_data['intent'] = 'chat'
+                    logger.warning(f"Fixed malformed intent. Defaulting to: chat")
+            
+            # Validate output_type - fix common mistakes
+            output_type = intent_data.get('output_type', 'text')
+            intent = intent_data.get('intent', '')
+            required_data = intent_data.get('required_data', [])
+            query_lower = user_query.lower()
+            
+            # Fix output_type based on intent and query content
+            if intent == 'visual_analysis' and output_type == 'ppt':
+                # Visual analysis questions should return text, not PPT
+                if not any(word in query_lower for word in ['ppt', 'powerpoint', 'presentation']):
+                    intent_data['output_type'] = 'text'
+                    logger.warning(f"Fixed output_type: visual_analysis should use 'text' not 'ppt'")
+            
+            elif intent == 'report':
+                # Report intent should have pdf or ppt output_type
+                if 'pdf' in query_lower:
+                    intent_data['output_type'] = 'pdf'
+                elif any(word in query_lower for word in ['ppt', 'powerpoint', 'presentation']):
+                    intent_data['output_type'] = 'ppt'
+            
+            elif intent in ['summarize', 'transcribe', 'detect_objects', 'extract_text'] and output_type not in ['text', 'chat_response']:
+                # These intents should default to text unless explicitly requesting a report
+                if 'pdf' not in query_lower and 'ppt' not in query_lower and 'powerpoint' not in query_lower:
+                    intent_data['output_type'] = 'text'
+                    logger.warning(f"Fixed output_type: {intent} should use 'text' as default")
+            
+            # Fix required_data - ensure it matches the intent
+            if intent == 'visual_analysis':
+                # Visual analysis MUST have frames and visual_analysis in required_data
+                if 'frames' not in required_data:
+                    required_data.append('frames')
+                    logger.warning(f"Fixed required_data: Added 'frames' for visual_analysis intent")
+                if 'visual_analysis' not in required_data:
+                    required_data.append('visual_analysis')
+                    logger.warning(f"Fixed required_data: Added 'visual_analysis' for visual_analysis intent")
+                intent_data['required_data'] = required_data
+            
+            elif intent == 'detect_objects':
+                # Object detection needs frames and objects
+                if 'frames' not in required_data:
+                    required_data.append('frames')
+                if 'objects' not in required_data:
+                    required_data.append('objects')
+                intent_data['required_data'] = required_data
+            
+            elif intent == 'report':
+                # Reports typically need transcription, frames, and visual_analysis
+                expected = ['transcription', 'frames', 'visual_analysis']
+                for item in expected:
+                    if item not in required_data:
+                        required_data.append(item)
+                intent_data['required_data'] = required_data
+            
             logger.info(f"📊 Intent Analysis: {intent_data.get('intent')} → {intent_data.get('output_type')}")
             logger.debug(f"Required data: {intent_data.get('required_data')}")
             
@@ -280,9 +372,9 @@ Return ONLY valid JSON."""
         
         logger.info(f"📦 Cache Status: {len(cached)} cached, {len(missing)} missing")
         if cached:
-            logger.debug(f"  ✅ Cached: {cached}")
+            logger.info(f"  ✅ Cached: {cached}")
         if missing:
-            logger.debug(f"  ❌ Missing: {missing}")
+            logger.info(f"  ❌ Missing: {missing}")
         
         return status
     
@@ -306,11 +398,17 @@ Return ONLY valid JSON."""
                 {"agent": "transcription", "tool": "transcribe_audio", "reason": "Transcribe audio to text"}
             ])
         
-        # Frames extraction
-        if any(d in required_data for d in ["frames", "visual_analysis", "objects", "text"]) and not cache_status.get("frames", False):
+        # Frames extraction - only if frames needed AND not cached
+        needs_frames = any(d in required_data for d in ["frames", "visual_analysis", "objects", "text"])
+        frames_cached = cache_status.get("frames", False)
+        
+        if needs_frames and not frames_cached:
+            logger.debug(f"  📌 Adding extract_frames: needs_frames={needs_frames}, cached={frames_cached}")
             tools_plan.append(
                 {"agent": "vision", "tool": "extract_frames", "reason": "Extract video frames"}
             )
+        elif needs_frames and frames_cached:
+            logger.debug(f"  ✅ Skipping extract_frames: frames already cached")
         
         # Visual analysis
         if "visual_analysis" in required_data and not cache_status.get("visual_analysis", False):
@@ -672,18 +770,40 @@ Return ONLY valid JSON."""
             structured_summary = await self._create_structured_summary(transcription_text, frame_analyses)
             cache.set("structured_summary", structured_summary)
         
-        # Generate PDF if requested
+        # Determine which format was requested (check for explicit format request)
+        query_lower = user_query.lower()
+        wants_ppt = "ppt" in query_lower or "powerpoint" in query_lower
+        wants_pdf = "pdf" in query_lower or generate_pdf
+        
+        # Only generate the explicitly requested format
+        # If both mentioned, prioritize the one mentioned first
         pdf_path = None
-        if generate_pdf or "pdf" in user_query.lower():
+        ppt_path = None
+        pdf_requested = False
+        ppt_requested = False
+        
+        if wants_ppt and wants_pdf:
+            # Both mentioned - check which comes first
+            ppt_idx = min(query_lower.find("ppt"), query_lower.find("powerpoint")) if "ppt" in query_lower or "powerpoint" in query_lower else float('inf')
+            pdf_idx = query_lower.find("pdf") if "pdf" in query_lower else float('inf')
+            
+            if ppt_idx < pdf_idx:
+                ppt_requested = True
+                ppt_path = await self._generate_ppt_report(structured_summary, data, cache)
+            else:
+                pdf_requested = True
+                pdf_path = await self._generate_pdf_report(structured_summary, data, cache)
+        elif wants_ppt:
+            # Only PPT requested
+            ppt_requested = True
+            ppt_path = await self._generate_ppt_report(structured_summary, data, cache)
+        elif wants_pdf:
+            # Only PDF requested
+            pdf_requested = True
             pdf_path = await self._generate_pdf_report(structured_summary, data, cache)
         
-        # Generate PPT if requested
-        ppt_path = None
-        if "ppt" in user_query.lower() or "powerpoint" in user_query.lower():
-            ppt_path = await self._generate_ppt_report(structured_summary, data, cache)
-        
-        # Format response
-        return self._format_summary_response(structured_summary, pdf_path, ppt_path)
+        # Format response - only show the path that was just generated
+        return self._format_summary_response(structured_summary, pdf_path, ppt_path, pdf_requested, ppt_requested)
     
     async def _create_structured_summary(self, transcription: str, frame_analyses: List[Dict]) -> Dict[str, Any]:
         """Create structured summary using LLM"""
@@ -793,11 +913,31 @@ Return JSON:
         
         # Call report agent to generate PDF
         try:
-            await self.client.create_pdf_report(content, str(output_path))
+            result = await self.client.create_pdf_report(content, str(output_path))
+            
+            # Check if tool returned an error
+            if isinstance(result, dict) and "error" in result:
+                logger.error(f"❌ PDF report generation failed: {result['error']}")
+                return None
+            
+            # Verify file was actually created
+            if not output_path.exists():
+                logger.error(f"❌ PDF report tool succeeded but file not found at: {output_path}")
+                logger.error(f"Tool result: {result}")
+                return None
+            
+            file_size = output_path.stat().st_size
+            if file_size == 0:
+                logger.error(f"❌ PDF report created but file is empty: {output_path}")
+                return None
+                
+            logger.info(f"✅ PDF report generated successfully: {output_path} ({file_size} bytes)")
             cache.set("pdf_report", {"path": str(output_path), "generated_at": datetime.now().isoformat()})
             return str(output_path)
         except Exception as e:
-            logger.error(f"Failed to generate PDF report: {e}")
+            logger.error(f"❌ Failed to generate PDF report: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
     
     async def _generate_ppt_report(
@@ -868,11 +1008,31 @@ Return JSON:
         
         # Call report agent to generate PPT
         try:
-            await self.client.create_ppt_report(content, str(output_path))
+            result = await self.client.create_ppt_report(content, str(output_path))
+            
+            # Check if tool returned an error
+            if isinstance(result, dict) and "error" in result:
+                logger.error(f"❌ PPT report generation failed: {result['error']}")
+                return None
+            
+            # Verify file was actually created
+            if not output_path.exists():
+                logger.error(f"❌ PPT report tool succeeded but file not found at: {output_path}")
+                logger.error(f"Tool result: {result}")
+                return None
+            
+            file_size = output_path.stat().st_size
+            if file_size == 0:
+                logger.error(f"❌ PPT report created but file is empty: {output_path}")
+                return None
+                
+            logger.info(f"✅ PPT report generated successfully: {output_path} ({file_size} bytes)")
             cache.set("ppt_report", {"path": str(output_path), "generated_at": datetime.now().isoformat()})
             return str(output_path)
         except Exception as e:
-            logger.error(f"Failed to generate PPT report: {e}")
+            logger.error(f"❌ Failed to generate PPT report: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
     
     def _format_visual_summary(self, visual_data: Dict[str, Any]) -> str:
@@ -914,7 +1074,7 @@ Return JSON:
         
         return summary
     
-    def _format_summary_response(self, summary: Dict[str, Any], pdf_path: Optional[str], ppt_path: Optional[str] = None) -> str:
+    def _format_summary_response(self, summary: Dict[str, Any], pdf_path: Optional[str], ppt_path: Optional[str] = None, pdf_requested: bool = False, ppt_requested: bool = False) -> str:
         """Format summary for chat response"""
         response = f"✅ **Video Analysis Complete!**\n\n"
         response += f"**{summary.get('title', 'Video Summary')}**\n\n"
@@ -935,12 +1095,16 @@ Return JSON:
                 response += f"{i}. {takeaway}\n"
             response += "\n"
         
-        # Show available reports
+        # Show available reports or error messages
         if pdf_path:
             response += f"📄 **Full PDF Report:** `{pdf_path}`\n"
+        elif pdf_requested:
+            response += f"❌ **PDF generation failed** - Please check the logs for details\n"
         
         if ppt_path:
             response += f"📊 **PowerPoint Presentation:** `{ppt_path}`\n"
+        elif ppt_requested:
+            response += f"❌ **PowerPoint generation failed** - Please check the logs for details\n"
         
         return response
     

@@ -293,6 +293,18 @@ The backend uses Ollama as the planning LLM to:
 - Video files stored temporarily during processing
 - Models cached locally for fast inference
 
+## Execution Notes
+Once the application has launched, upload any video of interest or video from sample_video by clicking the "Browse File" in the UI. After that, you can ask anything about that video.
+
+Example Query:
+  “Transcribe the video.”
+  “Create a PowerPoint with the key points discussed in the video.”
+  "Summarize into PDF"
+  “What objects are shown in the video?”
+  “Are there any graphs in the video? If yes, describe them.”
+
+There are also sample PDF and PPTX in the sample_pdf_pptx folder to refer.
+
 ## Project Reflection
 
 ### ✅ What Works?
@@ -347,7 +359,7 @@ The backend uses Ollama as the planning LLM to:
 - **Impact**: Wrong intent = wrong tools executed = poor responses
 
 **3. LLM Tool Usage Confusion**
-- **Issue**: LLM doesn't always understand when/how to use available tools
+- **Issue**: LLM doesn't always understand when/how to use available tools, or is it necessary to use tools?
 - **Examples**:
   - User asks "What's in the video?" → LLM tries to answer without analyzing frames
   - Should execute `analyze_frame` tool but generates generic response instead

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 from datetime import datetime
+import html
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -27,6 +28,14 @@ class ReportAgent:
     
     def __init__(self):
         self.output_dir = Path("./reports")
+    
+    @staticmethod
+    def escape_html(text: str) -> str:
+        """Escape HTML special characters for ReportLab Paragraph"""
+        if not text:
+            return ""
+        # Escape HTML entities to prevent ReportLab parsing errors
+        return html.escape(str(text))
     
     async def create_pdf_report(self, content: Dict[str, Any], output_path: str) -> Dict[str, Any]:
         """
@@ -68,7 +77,7 @@ class ReportAgent:
             )
             
             report_title = content.get("title", "Video Analysis Report")
-            elements.append(Paragraph(report_title, title_style))
+            elements.append(Paragraph(self.escape_html(report_title), title_style))
             
             # Subtitle with generated timestamp
             subtitle_style = ParagraphStyle(
@@ -80,7 +89,7 @@ class ReportAgent:
                 alignment=1  # Center
             )
             generated_at = content.get("generated_at", datetime.now().strftime("%Y-%m-%d %I:%M %p"))
-            elements.append(Paragraph(f"Generated: {generated_at}", subtitle_style))
+            elements.append(Paragraph(f"Generated: {self.escape_html(generated_at)}", subtitle_style))
             elements.append(Spacer(1, 0.3 * inch))
             
             # Define section styles
@@ -104,7 +113,7 @@ class ReportAgent:
             summary = content.get("summary", "")
             if summary:
                 elements.append(Paragraph("SUMMARY:", heading2_style))
-                elements.append(Paragraph(summary, normal_style))
+                elements.append(Paragraph(self.escape_html(summary), normal_style))
                 elements.append(Spacer(1, 0.2 * inch))
             
             # KEY MOMENTS Section
@@ -113,11 +122,11 @@ class ReportAgent:
                 elements.append(Paragraph("KEY MOMENTS:", heading2_style))
                 for moment in key_moments:
                     if isinstance(moment, dict):
-                        time = moment.get("time", "")
-                        event = moment.get("event", "")
+                        time = self.escape_html(moment.get("time", ""))
+                        event = self.escape_html(moment.get("event", ""))
                         elements.append(Paragraph(f"{time} - {event}", normal_style))
                     else:
-                        elements.append(Paragraph(str(moment), normal_style))
+                        elements.append(Paragraph(self.escape_html(str(moment)), normal_style))
                 elements.append(Spacer(1, 0.2 * inch))
             
             # VISUAL ANALYSIS Section
@@ -127,14 +136,14 @@ class ReportAgent:
                 # Split by newlines and format each line
                 for line in visual_analysis.split('\n'):
                     if line.strip():
-                        elements.append(Paragraph(line, normal_style))
+                        elements.append(Paragraph(self.escape_html(line), normal_style))
                 elements.append(Spacer(1, 0.2 * inch))
             
             # TRANSCRIPT Section
             transcript = content.get("transcript", "")
             if transcript:
                 elements.append(Paragraph("TRANSCRIPT:", heading2_style))
-                elements.append(Paragraph(transcript, normal_style))
+                elements.append(Paragraph(self.escape_html(transcript), normal_style))
                 elements.append(Spacer(1, 0.2 * inch))
             
             # KEY TAKEAWAYS Section
@@ -142,7 +151,7 @@ class ReportAgent:
             if takeaways:
                 elements.append(Paragraph("KEY TAKEAWAYS:", heading2_style))
                 for takeaway in takeaways:
-                    elements.append(Paragraph(f"• {takeaway}", normal_style))
+                    elements.append(Paragraph(f"• {self.escape_html(takeaway)}", normal_style))
                 elements.append(Spacer(1, 0.2 * inch))
             
             # Build PDF
