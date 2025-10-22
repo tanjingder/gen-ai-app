@@ -48,6 +48,12 @@ class GrpcClient {
               text: msg.text,
               sender: msg.sender || "assistant",
               timestamp: msg.timestamp || Date.now(),
+              fileAttachment: msg.file_attachment ? {
+                filename: msg.file_attachment.filename,
+                filePath: msg.file_attachment.file_path,
+                fileType: msg.file_attachment.file_type,
+                fileSize: msg.file_attachment.file_size,
+              } : undefined,
             };
             // Small delay between messages for better UX
             await new Promise((resolve) => setTimeout(resolve, 100));
@@ -59,6 +65,12 @@ class GrpcClient {
             text: response.text || JSON.stringify(response),
             sender: response.sender || "assistant",
             timestamp: response.timestamp || Date.now(),
+            fileAttachment: response.file_attachment ? {
+              filename: response.file_attachment.filename,
+              filePath: response.file_attachment.file_path,
+              fileType: response.file_attachment.file_type,
+              fileSize: response.file_attachment.file_size,
+            } : undefined,
           };
         }
       } catch (invokeError: any) {
@@ -316,6 +328,28 @@ class GrpcClient {
    */
   setSessionId(sessionId: string): void {
     this.sessionId = sessionId;
+  }
+
+  /**
+   * Save file to user-selected location
+   */
+  async saveFileAs(sourcePath: string, defaultFilename: string): Promise<string> {
+    try {
+      console.log(`Saving file: ${defaultFilename}`);
+      
+      const result = await invoke<string>("save_file_as", {
+        sourcePath,
+        defaultFilename,
+      });
+      
+      console.log(`File saved to: ${result}`);
+      return result;
+    } catch (error) {
+      console.error("Save file error:", error);
+      throw new Error(
+        `Failed to save file: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 }
 

@@ -22,6 +22,16 @@ struct ChatResponse {
     timestamp: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     agent_used: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_attachment: Option<FileAttachmentData>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FileAttachmentData {
+    filename: String,
+    file_path: String,
+    file_type: String,
+    file_size: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -154,6 +164,14 @@ async fn grpc_chat(
                             "action": agent.action,
                             "metadata": agent.metadata
                         })
+                    }),
+                    file_attachment: msg.file_attachment.map(|fa| {
+                        FileAttachmentData {
+                            filename: fa.filename,
+                            file_path: fa.file_path,
+                            file_type: fa.file_type,
+                            file_size: fa.file_size,
+                        }
                     }),
                 });
             }
@@ -535,6 +553,39 @@ async fn update_session(
     }
 }
 
+/// Tauri command to save a file with native file picker
+#[tauri::command]
+async fn save_file_as(
+    source_path: String,
+    default_filename: String,
+) -> Result<String, String> {
+    use tauri::api::dialog::blocking::FileDialogBuilder;
+    use std::fs;
+    
+    println!("Save file dialog: {} -> {}", source_path, default_filename);
+    
+    // Show native save file dialog
+    let save_path = FileDialogBuilder::new()
+        .set_file_name(&default_filename)
+        .save_file();
+    
+    if let Some(path) = save_path {
+        // Copy file to user-selected location
+        match fs::copy(&source_path, &path) {
+            Ok(_) => {
+                let dest = path.to_string_lossy().to_string();
+                println!("✅ File saved to: {}", dest);
+                Ok(dest)
+            }
+            Err(e) => {
+                Err(format!("Failed to save file: {}", e))
+            }
+        }
+    } else {
+        Err("User cancelled save dialog".to_string())
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -546,10 +597,9 @@ fn main() {
             list_sessions,
             load_session,
             delete_session,
-            update_session
+            update_session,
+            save_file_as
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-

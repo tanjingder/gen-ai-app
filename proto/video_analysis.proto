@@ -39,6 +39,14 @@ message ChatResponse {
   string sender = 2; // "user", "assistant", "system"
   int64 timestamp = 3;
   optional AgentInfo agent_used = 4;
+  optional FileAttachment file_attachment = 5; // Optional file attachment (e.g., PDF/PPTX report)
+}
+
+message FileAttachment {
+  string filename = 1; // e.g., "Video_Analysis_Report.pdf"
+  string file_path = 2; // Full path to the file on backend
+  string file_type = 3; // "pdf" or "pptx"
+  int64 file_size = 4; // File size in bytes
 }
 
 message AgentInfo {

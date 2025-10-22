@@ -941,7 +941,14 @@ Create a JSON structure suitable for a professional report:
                 result = await self.client.create_ppt_report(content, str(output_path))
                 if output_path.exists():
                     cache.set("ppt_report", {"path": str(output_path), "generated_at": datetime.now().isoformat()})
-                    return f"{reasoning}\n\n---\n\n📊 **PowerPoint Presentation:** `{output_path}`"
+                    # Return both reasoning and file metadata in a parseable format
+                    file_info = json.dumps({
+                        "filename": output_path.name,
+                        "file_path": str(output_path.absolute()),
+                        "file_type": "pptx",
+                        "file_size": output_path.stat().st_size
+                    })
+                    return f"{reasoning}\n\n---\n\n📊 **PowerPoint Presentation Generated**\n\n<!-- FILE_ATTACHMENT: {file_info} -->"
             
             else:  # Default to PDF
                 output_path = cache.base_path / "reports" / f"{safe_filename}.pdf"
@@ -949,7 +956,14 @@ Create a JSON structure suitable for a professional report:
                 result = await self.client.create_pdf_report(content, str(output_path))
                 if output_path.exists():
                     cache.set("pdf_report", {"path": str(output_path), "generated_at": datetime.now().isoformat()})
-                    return f"{reasoning}\n\n---\n\n📄 **Full PDF Report:** `{output_path}`"
+                    # Return both reasoning and file metadata in a parseable format
+                    file_info = json.dumps({
+                        "filename": output_path.name,
+                        "file_path": str(output_path.absolute()),
+                        "file_type": "pdf",
+                        "file_size": output_path.stat().st_size
+                    })
+                    return f"{reasoning}\n\n---\n\n📄 **PDF Report Generated**\n\n<!-- FILE_ATTACHMENT: {file_info} -->"
             
             return f"{reasoning}\n\n❌ Report generation failed - please check logs"
             

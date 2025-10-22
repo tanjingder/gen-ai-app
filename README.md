@@ -1,6 +1,30 @@
-﻿# Local AI Video Analysis Desktop Application
+﻿# 📽 Local AI Video Analysis Desktop Application
 
 A fully offline AI desktop application for analyzing and querying short video files with multi-agent architecture.
+
+## 🎉 New Updates 🎉
+### PDF/PPTX File Saves at User Intended Location! (22/10/2025)
+#### Overview
+
+This feature allows users to choose where to save generated PDF/PPTX files when requesting reports. The file is saved to BOTH locations:
+1. **Session reports folder** (automatic backup): `data/sessions/{session_id}/reports/`
+2. **User-selected location** (via native file picker)
+
+#### User Flow
+
+1. **User requests a report**: "Summarize this video into a PDF"
+2. **AI generates the report**: 
+   - Shows summary and key points in chat
+   - Creates PDF in session reports folder
+   - Attaches file metadata to the response
+3. **File attachment appears in chat**:
+   - Shows filename, size, and file type
+   - Displays "Save As..." button
+4. **User clicks "Save As..."**:
+   - Native OS file picker opens
+   - User selects destination folder
+   - File is copied to selected location
+   - Success message confirms save location
 
 ## 🏗️ Architecture
 
@@ -411,10 +435,10 @@ Each agent is implemented as an MCP server with specific tools:
 - "Tell me about the presentation" (uses transcription + visual + text)
 - "Summarize everything" (uses all available data)
 
-### Usage Example:
+## 💻 Usage Example:
 ![alt text](docs/image.png)
 
-### Developer's Wishes:
+## 🧑🏻‍💻 Developer's Note:
 If there are any feedback regarding this project, please do not hesitate to contact me through my
 
 Email: jingdertan@gmai.com

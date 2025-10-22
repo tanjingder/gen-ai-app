@@ -4,6 +4,8 @@ gRPC Service Implementation
 import asyncio
 import uuid
 import grpc
+import json
+import re
 from pathlib import Path
 from typing import AsyncIterator, Dict, Any, Optional
 import time
@@ -145,10 +147,29 @@ class VideoAnalysisServicer:
                 # Add assistant message to session
                 session_manager.add_message(session_id, "assistant", response_text)
                 
+                # Parse file attachment if present
+                file_attachment = None
+                file_match = re.search(r'<!-- FILE_ATTACHMENT: (.+?) -->', response_text)
+                if file_match:
+                    try:
+                        file_info = json.loads(file_match.group(1))
+                        file_attachment = video_analysis_pb2.FileAttachment(
+                            filename=file_info.get("filename", ""),
+                            file_path=file_info.get("file_path", ""),
+                            file_type=file_info.get("file_type", ""),
+                            file_size=file_info.get("file_size", 0)
+                        )
+                        # Remove the HTML comment from the displayed message
+                        response_text = re.sub(r'\s*<!-- FILE_ATTACHMENT: .+? -->', '', response_text)
+                        logger.info(f"📎 File attachment detected: {file_info.get('filename')}")
+                    except Exception as e:
+                        logger.error(f"Failed to parse file attachment: {e}")
+                
                 yield video_analysis_pb2.ChatResponse(
                     message=response_text,
                     sender="assistant",
-                    timestamp=int(time.time() * 1000)
+                    timestamp=int(time.time() * 1000),
+                    file_attachment=file_attachment
                 )
             else:
                 yield video_analysis_pb2.ChatResponse(

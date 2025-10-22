@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Download, FileText, FileSpreadsheet } from "lucide-react";
 import { grpcClient } from "../services/grpcClient";
 import { Message } from "../types";
 import ReactMarkdown from "react-markdown";
@@ -115,6 +115,52 @@ export default function ChatInterface({ videoId, isConnected, initialMessages = 
     }
   };
 
+  const handleDownloadFile = async (fileAttachment: Message["fileAttachment"]) => {
+    if (!fileAttachment) return;
+    
+    try {
+      const savedPath = await grpcClient.saveFileAs(
+        fileAttachment.filePath,
+        fileAttachment.filename
+      );
+      addSystemMessage(`✅ File saved to: ${savedPath}`);
+    } catch (error) {
+      console.error("Download error:", error);
+      addSystemMessage(`❌ Failed to save file: ${error}`);
+    }
+  };
+
+  const renderFileAttachment = (fileAttachment: Message["fileAttachment"]) => {
+    if (!fileAttachment) return null;
+
+    const fileIcon = fileAttachment.fileType === "pdf" ? (
+      <FileText className="w-5 h-5" />
+    ) : (
+      <FileSpreadsheet className="w-5 h-5" />
+    );
+
+    const fileSizeKB = (fileAttachment.fileSize / 1024).toFixed(2);
+
+    return (
+      <div className="mt-3 p-3 bg-gray-800 rounded-lg border border-gray-600">
+        <div className="flex items-center gap-3">
+          <div className="text-blue-400">{fileIcon}</div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm truncate">{fileAttachment.filename}</div>
+            <div className="text-xs text-gray-400">{fileSizeKB} KB • {fileAttachment.fileType.toUpperCase()}</div>
+          </div>
+          <button
+            onClick={() => handleDownloadFile(fileAttachment)}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Save As...
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden">
       {/* Messages Area */}
@@ -156,6 +202,7 @@ export default function ChatInterface({ videoId, isConnected, initialMessages = 
                   {message.text}
                 </ReactMarkdown>
               </div>
+              {message.fileAttachment && renderFileAttachment(message.fileAttachment)}
               <div className="text-xs opacity-50 mt-1 break-words">
                 {new Date(message.timestamp).toLocaleTimeString()}
               </div>

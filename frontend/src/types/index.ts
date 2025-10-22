@@ -17,6 +17,12 @@ export interface Message {
     action: string;
     metadata?: Record<string, string>;
   };
+  fileAttachment?: {
+    filename: string;
+    filePath: string;
+    fileType: string;
+    fileSize: number;
+  };
 }
 
 export interface ChatMessage {
