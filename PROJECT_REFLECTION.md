@@ -4,7 +4,7 @@
 
 **1. Multi-Format Report Generation**
 - Successfully generates structured PDF and PowerPoint reports from video analysis
-- Includes comprehensive sections: transcript, visual analysis, object detection, and extracted text
+- Includes comprehensive sections: transcript, visual analysis, object detection, extracted text, and chart analysis
 - Automated formatting with proper styling and organization
 
 **2. Audio Transcription**
@@ -16,96 +16,132 @@
 - **Object Detection**: YOLOv8 successfully detects objects across 10 sampled frames
   - Provides confidence scores and instance counts
   - LLM generates natural language summaries of detected objects
-- **Frame Description**: LLaVA vision model analyzes visual content
+- **Frame Description**: LLaVA vision model analyzes visual content (~8 frames sampled)
   - Describes scenes, identifies elements (graphs, charts, code, presentations)
   - Provides detailed frame-by-frame breakdowns with timestamps
 - **OCR Text Extraction**: Tesseract extracts on-screen text from 10 frames
   - Cleans and filters OCR noise
   - LLM analyzes extracted text for key information
+- **Chart Analysis** (NEW in V3): LLaVA-powered chart detection and analysis
+  - Detects charts, graphs, tables, diagrams, and infographics
+  - Analyzes up to 10 frames for data visualizations
+  - Provides chart type, description, and insights
 
-**4. Intelligent Query Processing**
-- Intent classification system routes queries to appropriate tools
-- Cache-first architecture prevents redundant processing
-- Supports multiple query types: summarization, object detection, visual analysis, text extraction, and general questions
+**4. Orchestrator V3: LLM-Driven 7-Layer Architecture**
+- **Layer 1 - Intent Interpretation**: LLM freely interprets what user wants (no rigid classification)
+- **Layer 2 - Context Retrieval**: Smart cache checking for required data only
+- **Layer 3 - Action Planning**: Deterministic tool mapping (no LLM needed, faster)
+- **Layer 4 - Tool Execution**: Parallel execution with multi-frame intelligent sampling
+- **Layer 5 - Result Fusion**: Merges cached + fresh data into unified dataset
+- **Layer 6 - Free Reasoning**: LLM thinks naturally without format constraints
+- **Layer 7 - Response Generation**: Formats output only when needed (text/report/structured)
 
 **5. Session Management**
 - Persistent chat sessions with automatic video-session binding
-- Efficient caching of analysis results (frames, transcript, objects, text)
+- Efficient caching of analysis results (frames, transcript, objects, text, charts)
 - Quick retrieval for follow-up questions without re-processing
+- Session cache stored in `data/sessions/{session_id}/cache/*.json`
+
+**6. Intelligent Query Processing**
+- **Flexible data requirements**: Only fetches what's needed based on user query
+- **Cache-first architecture**: Reuses existing data, only runs missing analyses
+- **Natural language understanding**: Handles conversational queries like "Are there graphs?" or "Tell me about the presentation"
+- Supports multiple query types: transcription, visual analysis, object detection, text extraction, chart analysis, and multi-modal synthesis
 
 ---
 
 ### ❌ What Doesn't Work?
 
-**1. Inconsistent LLM Responses**
-- **Issue**: Sometimes the model replies "nothing were observed" even when data exists
-- **Cause**: LLM may not properly interpret cached data or receives incomplete context
-- **Examples**: 
-  - Visual analysis returns "No visual analysis available" when frames exist but weren't analyzed
-  - Object detection shows contradictory answers (e.g., "No charts" but mentions "bar graphs" in summary)
+**1. Chart Detection Accuracy**
+- **Issue**: LLaVA sometimes fails to detect charts even when they're clearly visible
+- **Cause**: 
+  - Vision model may be too conservative in detection
+  - Two-stage detection (yes/no → analysis) was inefficient and prone to false negatives
+  - Simple "yes/no" prompts didn't provide enough context for accurate detection
+- **Current Solution (V3)**: Single comprehensive prompt with explicit instructions
+  - Tells LLaVA to be "generous" in detection
+  - Includes examples of what counts as charts (tables, diagrams, infographics)
+  - Better keyword-based detection logic in post-processing
+- **Remaining Issue**: Model may still miss charts in certain frames depending on sampling
 
-**2. Intent Classification Failures**
-- **Issue**: Similar queries get classified differently
-- **Examples**:
-  - "Are there any graphs?" → `visual_analysis` ✅
-  - "Are there any graphs or charts?" → `chat` ❌ (should be `visual_analysis`)
-- **Impact**: Wrong intent = wrong tools executed = poor responses
+**2. Frame Sampling May Miss Content**
+- **Issue**: Fixed sampling strategy (10 evenly distributed frames) might skip important moments
+- **Cause**: Charts/objects may appear between sampled frames
+- **Example**: Video has chart at frame 15, but we sample frames [0, 10, 20, 30...] → missed
+- **Impact**: User asks "Are there charts?" but analysis doesn't find any because chart was at unsampled frame
 
-**3. LLM Tool Usage Confusion**
-- **Issue**: LLM doesn't always understand when/how to use available tools, or is it necessary to use tools?
-- **Examples**:
-  - User asks "What's in the video?" → LLM tries to answer without analyzing frames
-  - Should execute `analyze_frame` tool but generates generic response instead
-- **Cause**: Insufficient tool descriptions in prompts and unclear execution flow
+**3. Context Window Limitations**
+- **Issue**: Long transcripts get truncated when passed to LLM
+- **Cause**: Ollama llama3.2 has ~8K token context limit
+- **Impact**: Can't include full transcript + all frame descriptions + all data in one prompt for long videos
+- **Workaround**: Truncate transcript to first 3000 characters in Layer 6
+
+**4. LLM Response Variability**
+- **Issue**: Same query can produce slightly different answers on repeated runs
+- **Cause**: LLM's non-deterministic nature (temperature > 0)
+- **Impact**: Inconsistent user experience, harder to debug issues
 
 ---
 
 ### 🚀 Potential Improvements
 
-**1. More Flexible, Natural LLM Responses**
+**1. Lightweight Query Classification Layer**
+- **Problem**: Orchestrator sometimes confuses when tools need to be called
+- **Solution**: Add lightweight LLM (e.g., Phi-3-mini, TinyLlama) before Layer 1
+  - Fast pre-classification: "Does this need video analysis or is it a general chat?"
+  - Examples:
+    - "Hello" → chat (no tools needed)
+    - "What's in the video?" → video_analysis (needs tools)
+    - "Thanks!" → chat (no tools needed)
+    - "Are there charts?" → video_analysis (needs tools)
+  - Benefits:
+    - Saves processing time on non-analysis queries
+    - Reduces unnecessary tool executions
+    - Lightweight model (~2GB) runs fast (~50ms)
+    - Can run in parallel with Ollama without conflicts
 
-**Current State**: Rigid, structured output
-    🎬 Visual Analysis
-    Analyzed 6 frames
+**2. Adaptive Frame Sampling**
+- **Current**: Fixed sampling (10 evenly distributed frames)
+- **Improved**: Intelligent sampling based on scene changes
+  - Use scene detection algorithms (e.g., PySceneDetect)
+  - Sample more frames during scene transitions
+  - Ensure charts/important content aren't missed
+  - Example: Video with 100 frames but only 3 scenes → sample heavily within each scene
 
-    Direct Answer: [Yes/No answer]
-    Brief Summary: [2-3 sentences]
-    Key Visual Elements:
+**3. Progressive Analysis with Feedback**
+- **First pass**: Quick low-res analysis to detect content types
+- **Second pass**: Targeted high-quality analysis on interesting frames
+- **Example**: 
+  1. Scan all frames quickly to find which contain charts
+  2. Only run detailed chart analysis on those specific frames
+  3. Saves time and improves accuracy
 
-    Item 1
-    Item 2
+**4. Enhanced Chart Detection**
+- **Upgrade to specialized vision models**:
+  - Donut (Document Understanding Transformer) for structured data
+  - ChartQA for chart-specific question answering
+  - Pix2Struct for screenshots and diagrams
+- **Hybrid approach**: Combine LLaVA + OpenCV
+  - OpenCV detects chart-like patterns (lines, rectangles, grids)
+  - LLaVA analyzes only frames flagged by OpenCV
+  - Reduces false negatives while keeping good descriptions
 
-**Improved State**: Conversational, context-aware responses
-    Based on analyzing 6 frames throughout your video, I can see several bar graphs
-    appearing around the 1:16 mark showing price trends, and another at 1:54
-    displaying religious demographics over time. The video appears to be an
-    educational presentation about data visualization techniques.
+**5. Custom Output Location for Reports**
+- **Current**: Reports saved to default location `data/sessions/{session_id}/reports/`
+- **Improved**: Let user choose where to save PDF or PPTX
+  - Add file picker dialog in UI
+  - Allow user to specify custom path before generation
+  - Remember last used directory for convenience
+  - Benefits:
+    - Users can save directly to desired folder (Desktop, Documents, project folders)
+    - No need to manually move files after generation
+    - Better integration with user's file organization system
+    - Can save to network drives or cloud-synced folders
 
-    The most prominent charts are:
-
-    A price trend graph with daily data (frame 3)
-    A demographics bar chart showing religious affiliations by age (frame 4)
-    A 5K race runners distribution chart (frame 5)
-    Would you like me to provide more details about any specific chart?
-
-**Benefits**:
-- ✅ More engaging and human-like
-- ✅ Adapts tone to user's question style
-- ✅ Offers follow-up suggestions
-- ✅ Less repetitive formatting
-
-**2. Dynamic Response Length**
-- Short answers for simple yes/no questions
-- Detailed analysis when user asks for in-depth information
-- Progressive disclosure (summary first, expand on request)
-
-**3. Multi-Modal Synthesis**
-- Combine transcript + visual + objects + text into cohesive narrative
-- Example: "At 1:30, the speaker explains event loops while showing a diagram with multiple processes (detected: 3 rectangles, 2 arrows)"
-
-**4. Interactive Clarifications**
-- When LLM is uncertain, ask clarifying questions
-- Example: "I see some graphical elements at 1:30. Are you asking about the code diagram or the data visualization chart?"
+**6. Multi-Modal Synthesis Improvements**
+- Combine transcript + visual + objects + text + charts into cohesive narrative
+- Example: "At 1:30, the speaker explains event loops (transcript) while showing a diagram (visual) with multiple processes (3 rectangles detected) and code snippets (OCR text: 'async function')"
+- Cross-reference data sources with timestamps
 
 ---
 
@@ -188,15 +224,15 @@ d) **Contradictory Logic**
 - Says "No charts" in Direct Answer but lists "bar graphs" in Summary
 - Claims "nothing detected" despite object detection results showing 52 objects
 
-#### **3. Tool Orchestration Complexity**
+#### **3. Tool Orchestration Complexity** → SOLVED in V3
 
 **Challenge**: LLM doesn't inherently know when/how to use tools
 
-**Initial Approach**: Let LLM decide which tools to call
+**Initial Approach (V1/V2)**: Let LLM decide which tools to call
 - **Problem**: LLM often skips tool usage and tries to answer directly
 - **Example**: User asks "What objects are in the video?" → LLM responds "I cannot see the video" instead of calling `detect_objects`
 
-**Current Solution**: Intent classification + forced execution
+**V2 Solution**: Intent classification + forced execution
 - Analyze user query intent first
 - Map intent to required tools/data
 - Execute tools regardless of LLM's preference
@@ -206,6 +242,21 @@ d) **Contradictory Logic**
 - Designing robust intent classification (many edge cases)
 - Creating comprehensive examples for each intent type
 - Balancing flexibility vs rigid tool execution
+- Intent classification itself was error-prone (similar queries classified differently)
+
+**V3 Solution**: 7-Layer Architecture with Flexible Data Requirements ✅
+- **Layer 1**: LLM interprets user intent and declares `required_data: ["charts", "transcription", ...]`
+  - No rigid classification into predefined intents
+  - LLM naturally understands what data is needed
+- **Layer 2**: Check cache for required data
+- **Layer 3**: Deterministic tool planning (no LLM, just logic)
+  - If "charts" is required and not cached → plan `analyze_chart` tool
+  - Simple mapping, no ambiguity
+- **Layer 6**: Free reasoning with all available data
+  - LLM sees the actual data, not tool descriptions
+  - Reasons naturally about what it observes
+
+**Result**: Eliminated intent classification errors, more flexible and maintainable
 
 ### ⏰ What Could Be Achieved with More Time
 
@@ -271,17 +322,29 @@ d) **Contradictory Logic**
 
 ### 📊 Summary
 
-**Current State**: Functional MVP with core features working but inconsistent reliability
+**Current State**: Functional V3 with improved architecture and natural LLM reasoning
 
 **Main Achievements**:
-- ✅ Multi-modal analysis (audio, visual, text, objects)
+- ✅ Multi-modal analysis (audio, visual, text, objects, **charts**)
 - ✅ Session-based caching for efficient re-querying
-- ✅ Report generation in multiple formats
+- ✅ Report generation in multiple formats (PDF, PPT)
+- ✅ **7-Layer orchestration architecture** (V3)
+- ✅ **Free reasoning** without rigid format constraints
+- ✅ **Deterministic tool planning** (faster, more reliable)
+- ✅ **Flexible data requirements** (LLM declares what it needs)
+- ✅ **Chart analysis support** using LLaVA vision model
 
 **Key Limitations**:
-- ❌ LLM response inconsistency and hallucinations
-- ❌ Rigid response formatting
-- ❌ No real-time or progressive analysis
+- ❌ Chart detection accuracy depends on LLaVA's vision capabilities
+- ❌ Fixed frame sampling may miss content between samples
+- ❌ Context window limits for very long videos
+- ❌ LLM response variability (non-deterministic)
 
 **Biggest Learning**:
-Building an AI orchestration system is more about **reliable infrastructure** and **careful prompt engineering** than raw model capabilities. The best LLM in the world won't help if the tool execution is unreliable or the prompts are ambiguous.
+Building an AI orchestration system is more about **reliable infrastructure**, **careful prompt engineering**, and **architectural design** than raw model capabilities. **V3's layered approach** solves many V2 issues by:
+1. Trusting the LLM to interpret intent naturally (Layer 1)
+2. Using deterministic logic for tool planning (Layer 3)
+3. Allowing free reasoning without constraints (Layer 6)
+4. Only applying format in the final step (Layer 7)
+
+**Key Insight**: "Constrain less, reason more" - The best results come from giving LLMs freedom to think naturally, then structuring the output only when necessary.
