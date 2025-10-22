@@ -315,6 +315,14 @@ class MCPClient:
             {"frame_path": frame_path}
         )
     
+    async def analyze_chart(self, frame_path: str) -> Dict[str, Any]:
+        """Analyze charts and graphs in a frame"""
+        return await self.call_tool(
+            "vision",
+            "analyze_chart",
+            {"frame_path": frame_path}
+        )
+    
     # Report Agent Methods
     async def create_pdf_report(self, analysis_data: Dict[str, Any], output_path: str) -> Dict[str, Any]:
         """Create PDF report from analysis data"""

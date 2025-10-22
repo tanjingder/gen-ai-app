@@ -12,7 +12,7 @@ from loguru import logger
 import ollama
 
 from ..utils.config import settings
-from ..mcp.orchestrator import orchestrator
+from ..mcp.orchestrator_v3 import orchestrator_v3 as orchestrator
 from ..models.video_store import VideoStore
 
 
@@ -129,17 +129,16 @@ class VideoAnalysisServicer:
                     timestamp=int(time.time() * 1000)
                 )
                 
-                # Use V2 orchestrator - single call handles everything
+                # Use V3 orchestrator - single call handles everything
                 try:
                     response_text = await orchestrator.process_query(
                         user_query=message,
                         video_id=video_id,
                         video_path=video_info["path"],
-                        session_id=session_id,
-                        video_context=video_info.get("metadata")
+                        session_id=session_id
                     )
                 except Exception as e:
-                    logger.exception(f"Error in orchestrator V2: {e}")
+                    logger.exception(f"Error in orchestrator V3: {e}")
                     response_text = f"❌ Error processing your request: {str(e)}"
                 session["history"].append({"role": "assistant", "content": response_text})
                 

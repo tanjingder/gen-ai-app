@@ -279,112 +279,131 @@ class VisionAgent:
     
     async def analyze_chart(self, frame_path: str) -> Dict[str, Any]:
         """
-        Analyze charts and graphs in frame using OpenCV + pytesseract
+        Analyze charts and graphs in frame using LLaVA vision model
         
         Args:
             frame_path: Path to frame image
             
         Returns:
-            Chart analysis results with type, text labels, and structure
+            Chart analysis with type, description, data points, and insights
         """
         try:
             frame_file = Path(frame_path)
             if not frame_file.exists():
                 return {"error": f"Frame file not found: {frame_path}"}
             
-            # Read image
+            # Read image for basic info
             image = cv2.imread(str(frame_file))
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             height, width = image.shape[:2]
             
-            # Detect chart type and structure using OpenCV
-            chart_analysis = {
-                "width": width,
-                "height": height,
-                "chart_type": "unknown",
-                "has_axes": False,
-                "has_bars": False,
-                "has_lines": False,
-                "text_labels": []
-            }
-            
-            # Edge detection for finding chart elements
-            edges = cv2.Canny(gray, 50, 150)
-            
-            # Detect lines (for line charts and axes)
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=50, maxLineGap=10)
-            if lines is not None and len(lines) > 0:
-                chart_analysis["has_lines"] = True
-                
-                # Check for perpendicular lines (axes)
-                horizontal_lines = sum(1 for line in lines if abs(line[0][1] - line[0][3]) < 10)
-                vertical_lines = sum(1 for line in lines if abs(line[0][0] - line[0][2]) < 10)
-                
-                if horizontal_lines > 0 and vertical_lines > 0:
-                    chart_analysis["has_axes"] = True
-            
-            # Detect rectangles/bars (for bar charts)
-            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            rectangular_contours = []
-            for contour in contours:
-                approx = cv2.approxPolyDP(contour, 0.02 * cv2.arcLength(contour, True), True)
-                if len(approx) == 4:  # Rectangle
-                    x, y, w, h = cv2.boundingRect(contour)
-                    # Filter small contours
-                    if w > 20 and h > 20:
-                        rectangular_contours.append((x, y, w, h))
-            
-            if len(rectangular_contours) >= 2:
-                chart_analysis["has_bars"] = True
-            
-            # Determine chart type
-            if chart_analysis["has_bars"]:
-                chart_analysis["chart_type"] = "bar_chart"
-            elif chart_analysis["has_lines"] and chart_analysis["has_axes"]:
-                chart_analysis["chart_type"] = "line_chart"
-            elif chart_analysis["has_axes"]:
-                chart_analysis["chart_type"] = "plot"
-            
-            # Extract text labels using OCR
             try:
-                import pytesseract
+                # Use Ollama with LLaVA for intelligent chart detection
+                import ollama
                 
-                # Extract all text
-                text = pytesseract.image_to_string(image)
+                # Encode image to base64 for Ollama
+                with open(frame_file, 'rb') as img_file:
+                    img_data = img_file.read()
+                    img_base64 = base64.b64encode(img_data).decode('utf-8')
                 
-                # Get text with bounding boxes
-                text_data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+                # Single comprehensive prompt that works better for chart detection
+                analysis_prompt = """Look at this image carefully. 
+
+If there are any charts, graphs, plots, data visualizations, diagrams with data, tables, or infographics present:
+1. Start your response with "YES - CHART DETECTED"
+2. Identify the chart type (bar chart, line graph, pie chart, scatter plot, table, diagram, etc.)
+3. Describe what data is shown (axes, labels, title, values)
+4. Explain the key trends, patterns, or insights from the data
+
+If there are NO charts, graphs, or data visualizations:
+- Simply respond with "NO CHART" and briefly describe what you see instead
+
+Be generous in your detection - if there's any visual representation of data or information, even simple ones like tables or diagrams, consider it a chart."""
                 
-                labels = []
-                for i in range(len(text_data['text'])):
-                    txt = text_data['text'][i].strip()
-                    if txt and len(txt) > 0:
-                        labels.append({
-                            "text": txt,
-                            "confidence": text_data['conf'][i],
-                            "bbox": [
-                                text_data['left'][i],
-                                text_data['top'][i],
-                                text_data['width'][i],
-                                text_data['height'][i]
-                            ]
-                        })
+                response = ollama.chat(
+                    model='llava',
+                    messages=[{
+                        'role': 'user',
+                        'content': analysis_prompt,
+                        'images': [img_base64]
+                    }]
+                )
                 
-                chart_analysis["text_labels"] = labels
-                chart_analysis["full_text"] = text
+                analysis_text = response['message']['content']
+                analysis_lower = analysis_text.lower()
+                
+                # Check if chart was detected
+                has_chart = (
+                    'yes' in analysis_lower[:50] or 
+                    'chart detected' in analysis_lower[:100] or
+                    'bar chart' in analysis_lower or
+                    'line graph' in analysis_lower or
+                    'pie chart' in analysis_lower or
+                    'scatter plot' in analysis_lower or
+                    'graph' in analysis_lower[:100] or
+                    'diagram' in analysis_lower[:100]
+                ) and 'no chart' not in analysis_lower[:20]
+                
+                if not has_chart:
+                    return {
+                        "success": True,
+                        "has_chart": False,
+                        "chart_type": "none",
+                        "description": analysis_text,
+                        "model": "ollama/llava"
+                    }
+                
+                # Extract chart type from response
+                chart_type = "unknown"
+                type_keywords = {
+                    'bar chart': 'bar_chart',
+                    'bar graph': 'bar_chart',
+                    'line chart': 'line_chart',
+                    'line graph': 'line_chart',
+                    'pie chart': 'pie_chart',
+                    'scatter plot': 'scatter_plot',
+                    'scatter': 'scatter_plot',
+                    'histogram': 'histogram',
+                    'area chart': 'area_chart',
+                    'box plot': 'box_plot',
+                    'table': 'table',
+                    'diagram': 'diagram',
+                    'infographic': 'infographic'
+                }
+                
+                for keyword, chart_name in type_keywords.items():
+                    if keyword in analysis_lower:
+                        chart_type = chart_name
+                        break
+                
+                return {
+                    "success": True,
+                    "has_chart": True,
+                    "chart_type": chart_type,
+                    "description": analysis_text,
+                    "insights": analysis_text,
+                    "data_points": [],
+                    "frame_info": {
+                        "width": width,
+                        "height": height,
+                        "path": str(frame_file)
+                    },
+                    "model": "ollama/llava"
+                }
                 
             except ImportError:
-                chart_analysis["note"] = "Install pytesseract for text extraction: pip install pytesseract"
-            except Exception as ocr_error:
-                chart_analysis["ocr_error"] = str(ocr_error)
-            
-            return {
-                "success": True,
-                "analysis": chart_analysis
-            }
+                return {
+                    "error": "Ollama package not installed. Run: pip install ollama",
+                    "has_chart": False
+                }
+            except Exception as e:
+                return {
+                    "error": f"Chart analysis failed: {str(e)}",
+                    "has_chart": False,
+                    "note": "Ensure Ollama is running and llava model is available"
+                }
             
         except Exception as e:
-            return {"error": f"Chart analysis failed: {str(e)}"}
+            return {"error": f"Chart analysis failed: {str(e)}", "has_chart": False}
 
 
 async def main():

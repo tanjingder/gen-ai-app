@@ -4,6 +4,8 @@ A fully offline AI desktop application for analyzing and querying short video fi
 
 ## 🏗️ Architecture
 
+### System Overview
+
 ```
 [Frontend: React + Tauri Desktop App]
         ↓
@@ -14,20 +16,98 @@ A fully offline AI desktop application for analyzing and querying short video fi
         ↓
 [Python Backend: gRPC Server]
         ↓
-    MCP Orchestrator
-    (stdio-based)
+    MCP Orchestrator V3
+    (LLM-Driven 7-Layer Architecture)
         ↓
-    🧠 Ollama (Planner + Summarizer)
-        ↓
-    JSON Plan Output
+    🧠 Ollama (Intent + Reasoning)
         ↓
 │ MCP Agents (Spawn On-Demand via stdio)          
 │--------------------------------------------
 │ 🎧 Transcription Agent (Speech-to-text)
-│ 👁️ Vision Agent (Object detection, OCR)
+│ 👁️ Vision Agent (Frame analysis, OCR, Chart analysis)
 │ 📝 Report Agent (PDF/PPT generation)
         ↓
-[Final Output → PDF/PPT Summary]
+[Session Cache + Final Response]
+```
+
+### Orchestrator V3: 7-Layer Flow
+
+The orchestrator uses a layered prompting strategy that minimizes rigid constraints and lets the LLM reason freely:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Layer 1: INTERPRET INTENT                               │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ • What does the user want?                          │ │
+│ │ • What data is needed? (transcription, visual,      │ │
+│ │   objects, text, charts)                            │ │
+│ │ • Output preference? (text, report, structured)     │ │
+│ │ → Returns: {user_wants, required_data, preference}  │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│ Layer 2: RETRIEVE CONTEXT                               │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ • Check session cache for existing data             │ │
+│ │ • Load cached: transcription, frames, visual,       │ │
+│ │   objects, text, charts                             │ │
+│ │ • Identify what's available vs. missing             │ │
+│ │ → Returns: {cached_data, has_*, missing_data}       │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│ Layer 3: PLAN ACTIONS                                   │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ • Deterministic mapping (no LLM needed)             │ │
+│ │ • Plan which MCP tools to call for missing data     │ │
+│ │ • Sequence: frames → analysis/detection/ocr/charts  │ │
+│ │ → Returns: [{agent, tool, reason}, ...]             │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│ Layer 4: EXECUTE TOOLS                                  │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ • Execute planned MCP tools via stdio               │ │
+│ │ • Multi-frame intelligent sampling (~10 frames)     │ │
+│ │ • Cache results for future queries                  │ │
+│ │ → Returns: {fresh_data: transcription, visual, ...} │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│ Layer 5: FUSE RESULTS                                   │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ • Merge cached data + fresh data                    │ │
+│ │ • Create unified dataset for reasoning              │ │
+│ │ • Count available data types                        │ │
+│ │ → Returns: {fused_data: all available data}         │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│ Layer 6: REASON FREELY                                  │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ • LLM thinks freely about all data                  │ │
+│ │ • NO format constraints                             │ │
+│ │ • Natural reasoning and insight generation          │ │
+│ │ • Pattern recognition and analysis                  │ │
+│ │ → Returns: {natural language reasoning}             │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│ Layer 7: GENERATE RESPONSE                              │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ • Format output based on preference                 │ │
+│ │ • text: Light formatting with sources               │ │
+│ │ • report: Generate PDF/PPT via report agent         │ │
+│ │ • structured: JSON output                           │ │
+│ │ → Returns: {final_response}                         │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ## 📁 Project Structure
@@ -248,59 +328,96 @@ cd frontend
 npm run tauri:dev
 ```
 
-## 🎯 Usage Flow
-
-1. **Launch Application**: Start the Tauri desktop app
-2. **Chat with AI**: Interact with Ollama through the chat interface
-3. **Upload Video**: Select a video file for analysis
-4. **Ask Questions**: Query the video content naturally
-5. **Get Reports**: Request PDF/PPT summaries of the analysis
-
 ## 🔌 MCP Server Integration
 
 Each agent is implemented as an MCP server with specific tools:
 
 ### Transcription Agent
 - `extract_audio` - Extract audio from video
-- `transcribe_audio` - Convert speech to text
+- `transcribe_audio` - Convert speech to text using Whisper
 - `get_timestamps` - Get timestamped transcription
 
-### Vision Agent
-- `extract_frames` - Extract key frames from video
-- `analyze_frame` - Describe frame content
-- `detect_objects` - Identify objects in frames
-- `extract_text` - OCR text from frames
-- `analyze_charts` - Extract data from graphs/charts
+### Vision Agent (LLaVA-powered)
+- `extract_frames` - Extract frames at 1 FPS from video
+- `analyze_frame` - Describe frame content using LLaVA
+- `detect_objects` - Identify objects using YOLO
+- `extract_text` - OCR text extraction using Tesseract
+- `analyze_chart` - Detect and analyze charts/graphs using LLaVA
 
 ### Report Agent
-- `create_pdf_report` - Generate PDF summary
-- `create_ppt_report` - Generate PowerPoint presentation
+- `create_pdf_report` - Generate PDF summary with reportlab
+- `create_ppt_report` - Generate PowerPoint presentation with python-pptx
 - `format_content` - Structure analyzed content
 
-## 🧠 Agent Orchestration
+## 🧠 Data Flow & Caching
 
-The backend uses Ollama as the planning LLM to:
-1. Understand user intent
-2. Determine which agents to invoke
-3. Coordinate agent responses
-4. Synthesize final answers
+### Session Management
+- Each video gets a unique session ID
+- Cache stored in `data/sessions/{session_id}/cache/`
+- Cached data types:
+  - `transcription.json` - Audio transcription
+  - `frames.json` - Extracted frame metadata
+  - `visual_analysis.json` - Frame descriptions
+  - `objects.json` - Detected objects
+  - `extracted_text.json` - OCR text
+  - `chart_analysis.json` - Chart/graph analysis
 
-## 📝 Development Notes
+### Intelligent Sampling
+- **Frame Extraction**: 1 frame per second
+- **Visual Analysis**: ~8 frames (evenly distributed)
+- **Object Detection**: 10 frames (evenly distributed)
+- **Text Extraction**: 10 frames (evenly distributed)
+- **Chart Analysis**: 10 frames (evenly distributed)
 
-- All processing is local - no cloud APIs
-- MCP servers communicate via stdio or HTTP
-- gRPC used for frontend-backend communication
-- Video files stored temporarily during processing
-- Models cached locally for fast inference
+### Multi-Query Efficiency
+1. First query: Extract + Analyze (slow)
+2. Subsequent queries: Use cached data (instant)
+3. Only fetch missing data types as needed
 
-## Execution Notes
-Once the application has launched, upload any video of interest or video from docs by clicking the "Browse File" in the UI. After that, you can ask anything about that video.
+### Example Queries
 
-Example Query:
-  “Transcribe the video.”
-  “Create a PowerPoint with the key points discussed in the video.”
-  "Summarize into PDF"
-  “What objects are shown in the video?”
-  “Are there any graphs in the video? If yes, describe them.”
+**Transcription:**
+- "Transcribe the video"
+- "What is being said in the video?"
+- "Give me the transcript with timestamps"
 
-There are also sample PDF and PPTX in the docs folder to refer.
+**Visual Analysis:**
+- "What's shown in the video?"
+- "Describe the visual content"
+- "Summarize the video"
+
+**Object Detection:**
+- "What objects are shown in the video?"
+- "How many people appear?"
+- "List all detected objects"
+
+**Text Extraction:**
+- "What text is visible?"
+- "Extract all text from the video"
+- "Are there any captions?"
+
+**Chart Analysis (NEW in V3):**
+- "Are there any graphs in the video?"
+- "Analyze the charts"
+- "What data is shown in the graphs?"
+- "Describe the visualizations"
+
+**Reports:**
+- "Create a PowerPoint with the key points"
+- "Generate a PDF summary"
+- "Make a presentation about this video"
+
+**Multi-modal:**
+- "Tell me about the presentation" (uses transcription + visual + text)
+- "Summarize everything" (uses all available data)
+
+### Usage Example:
+![alt text](docs/image.png)
+
+### Developer's Wishes:
+If there are any feedback regarding this project, please do not hesitate to contact me through my
+
+Email: jingdertan@gmai.com
+LinkedIn: www.linkedin.com/in/tan-jing-der-8091b6260
+
+### Thank you for your time!
