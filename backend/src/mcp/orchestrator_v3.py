@@ -181,7 +181,7 @@ Return ONLY valid JSON."""
     
     def retrieve_context(self, cache: SessionCache, intent: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Layer 2: Check what data we already have
+        Layer 2: Check what data we already have and what's missing
         
         Returns:
             {
@@ -190,7 +190,9 @@ Return ONLY valid JSON."""
                 "has_visual_analysis": true/false,
                 "has_objects": true/false,
                 "has_text": true/false,
-                "cached_data": {...}
+                "cached_data": {...},
+                "available_data": ["list of available required data types"],
+                "missing_data": ["list of missing required data types"]
             }
         """
         context = {
@@ -229,23 +231,27 @@ Return ONLY valid JSON."""
         }
         
         # Determine which required items are cached vs missing
-        available_required = []
-        missing_required = []
+        available_data = []
+        missing_data = []
         
         for data_type in required_data:
             cache_key = cache_mapping.get(data_type)
             if cache_key:
                 if context.get(cache_key, False):
-                    available_required.append(data_type)
+                    available_data.append(data_type)
                 else:
-                    missing_required.append(data_type)
+                    missing_data.append(data_type)
+        
+        # Add results to context
+        context["available_data"] = available_data
+        context["missing_data"] = missing_data
         
         # Log status focused on what's required
-        logger.info(f"📦 Context: {len(available_required)} required cached, {len(missing_required)} required missing")
-        if available_required:
-            logger.info(f"  ✅ Available: {available_required}")
-        if missing_required:
-            logger.info(f"  ❌ Missing: {missing_required}")
+        logger.info(f"📦 Context: {len(available_data)} required cached, {len(missing_data)} required missing")
+        if available_data:
+            logger.info(f"  ✅ Available: {available_data}")
+        if missing_data:
+            logger.info(f"  ❌ Missing: {missing_data}")
         
         return context
     
@@ -255,8 +261,6 @@ Return ONLY valid JSON."""
     
     async def plan_actions(
         self,
-        user_query: str,
-        intent: Dict[str, Any],
         context: Dict[str, Any]
     ) -> List[Dict[str, str]]:
         """
@@ -269,23 +273,8 @@ Return ONLY valid JSON."""
                 ...
             ]
         """
-        required_data = intent.get('required_data', [])
-        
-        # Map required data to cache keys
-        cache_mapping = {
-            "transcription": "has_transcription",
-            "visual_analysis": "has_visual_analysis",
-            "objects": "has_objects",
-            "text": "has_text",
-            "charts": "has_charts"
-        }
-        
-        # Determine what's missing
-        missing_data = []
-        for data_type in required_data:
-            cache_key = cache_mapping.get(data_type)
-            if cache_key and not context.get(cache_key, False):
-                missing_data.append(data_type)
+        # Get missing data from Layer 2
+        missing_data = context.get("missing_data", [])
         
         # If everything is cached, no tools needed
         if not missing_data:
@@ -408,7 +397,36 @@ Return ONLY valid JSON."""
                 if tool == "transcribe_audio":
                     cache.set("transcription", result)
                     results["transcription"] = result
-                    intermediate_data["transcription"] = result.get("text", "")
+                    
+                    # Save full transcription with timestamps to a txt file
+                    transcript_dir = cache.base_path / "transcripts"
+                    transcript_dir.mkdir(exist_ok=True)
+                    transcript_path = transcript_dir / f"{video_id}_transcript.txt"
+                    
+                    try:
+                        with open(transcript_path, 'w', encoding='utf-8') as f:
+                            text = result.get("text", "")
+                            if text:
+                                f.write(text)  # This will include the original timestamps
+                        
+                        # Add file metadata for UI download
+                        cache.set("transcript_file", {
+                            "path": str(transcript_path),
+                            "generated_at": datetime.now().isoformat()
+                        })
+                        
+                        # Add file info to results for immediate UI access
+                        file_info = json.dumps({
+                            "filename": transcript_path.name,
+                            "file_path": str(transcript_path.absolute()),
+                            "file_type": "txt",
+                            "file_size": transcript_path.stat().st_size
+                        })
+                        results["transcript_file_info"] = f"<!-- FILE_ATTACHMENT: {file_info} -->"
+                        
+                        logger.info(f"📝 Full transcription saved to: {transcript_path}")
+                    except Exception as e:
+                        logger.error(f"Error saving transcription file: {e}")
                 
                 elif tool == "extract_frames":
                     cache.set("frames", result)
@@ -500,7 +518,6 @@ Return ONLY valid JSON."""
             
             elif tool == "detect_objects":
                 # Multi-frame object detection
-                frames_list = intermediate_data.get("frames", [])
                 total_frames = intermediate_data.get("total_frames", 0)
                 
                 if total_frames == 0:
@@ -536,7 +553,6 @@ Return ONLY valid JSON."""
             
             elif tool == "extract_text":
                 # Multi-frame text extraction
-                frames_list = intermediate_data.get("frames", [])
                 total_frames = intermediate_data.get("total_frames", 0)
                 
                 if total_frames == 0:
@@ -564,7 +580,6 @@ Return ONLY valid JSON."""
             
             elif tool == "analyze_chart":
                 # Multi-frame chart analysis
-                frames_list = intermediate_data.get("frames", [])
                 total_frames = intermediate_data.get("total_frames", 0)
                 
                 if total_frames == 0:
@@ -832,16 +847,17 @@ Your response:"""
         elif output_pref == "report":
             return await self._generate_report(user_query, reasoning, fused_data, cache)
         
-        # For structured output
-        elif output_pref == "structured":
-            return await self._format_structured(reasoning, fused_data)
-        
+        # Default to text response
         else:
-            return reasoning
+            return self._format_text_response(reasoning, fused_data)
     
     def _format_text_response(self, reasoning: str, data: Dict[str, Any]) -> str:
         """Light formatting for text responses"""
         response = f"{reasoning}\n\n"
+        
+        # Add transcript file download info if available
+        if data.get("transcript_file_info"):
+            response += "\n\n📝 **Full Transcript Available**\n" + data.get("transcript_file_info") + "\n\n"
         
         # Add data source indicators
         sources = []
@@ -869,7 +885,6 @@ Your response:"""
         """Generate PDF or PPT report"""
         query_lower = user_query.lower()
         wants_ppt = "powerpoint" in query_lower or "ppt" in query_lower
-        wants_pdf = "pdf" in query_lower
         
         # Ask LLM to structure the reasoning for a report
         prompt = f"""Convert this analysis into a structured report format.
@@ -897,6 +912,8 @@ Create a JSON structure suitable for a professional report:
             )
             
             structured = json.loads(response["message"]["content"])
+            logger.info("📋 Structured Report Format:")
+            logger.info(json.dumps(structured, indent=2))
             
             # Build report content
             transcription = data.get("transcription", {})
@@ -938,7 +955,7 @@ Create a JSON structure suitable for a professional report:
             if wants_ppt:
                 output_path = cache.base_path / "reports" / f"{safe_filename}.pptx"
                 output_path.parent.mkdir(exist_ok=True)
-                result = await self.client.create_ppt_report(content, str(output_path))
+                await self.client.create_ppt_report(content, str(output_path))
                 if output_path.exists():
                     cache.set("ppt_report", {"path": str(output_path), "generated_at": datetime.now().isoformat()})
                     # Return both reasoning and file metadata in a parseable format
@@ -953,7 +970,7 @@ Create a JSON structure suitable for a professional report:
             else:  # Default to PDF
                 output_path = cache.base_path / "reports" / f"{safe_filename}.pdf"
                 output_path.parent.mkdir(exist_ok=True)
-                result = await self.client.create_pdf_report(content, str(output_path))
+                await self.client.create_pdf_report(content, str(output_path))
                 if output_path.exists():
                     cache.set("pdf_report", {"path": str(output_path), "generated_at": datetime.now().isoformat()})
                     # Return both reasoning and file metadata in a parseable format
@@ -970,14 +987,6 @@ Create a JSON structure suitable for a professional report:
         except Exception as e:
             logger.error(f"Error generating report: {e}")
             return f"{reasoning}\n\n❌ Report generation failed: {str(e)}"
-    
-    async def _format_structured(self, reasoning: str, data: Dict[str, Any]) -> str:
-        """Format as structured JSON"""
-        return json.dumps({
-            "analysis": reasoning,
-            "data_sources": list(data.keys()),
-            "timestamp": datetime.now().isoformat()
-        }, indent=2)
     
     # ============================================================
     # MAIN ORCHESTRATION FLOW
@@ -1005,7 +1014,7 @@ Create a JSON structure suitable for a professional report:
             context = self.retrieve_context(cache, intent)
             
             # Layer 3: Plan Actions
-            action_plan = await self.plan_actions(user_query, intent, context)
+            action_plan = await self.plan_actions(context)
             
             # Layer 4: Execute Tools
             fresh_data = await self.execute_tools(
